@@ -7,18 +7,18 @@ class QRSafetyScanner {
             this.scanning = false;
             this.stream = null;
             this.lastScannedCode = null;
-            this.hasAI = false;  // Track AI availability
-            this.aiSession = null;  // Store AI session
-            this.initilizeElements();  // typo: initilize
-            this.initEventListners(); // typo: Listners
+            this.hasAI = false;
+            this.aiSession = null;
+            this.initializeElements();  // Fixed typo
+            this.initEventListeners();  // Fixed typo
             this.initHomoglyphMap();
-            this.initAIPatterens(); // typo: Patterens
+            this.initAIPatterns();  // Fixed typo
         } catch (error) {
             console.error('Error in scanner constructor:', error);
         }
     }
 
-    initilizeElements() {
+    initializeElements() {  // Fixed method name
         try {
             this.startButton = document.getElementById('startButton');
             this.resultModal = document.getElementById('resultModal');
@@ -49,29 +49,27 @@ class QRSafetyScanner {
         }
     }
 
-    initEventListners() {
+    initEventListeners() {  // Fixed method name
         try {
-            if (this.startButton) {
-                this.startButton.addEventListener('click', () => this.startScanning());
-            }
-            if (this.closeModalBtn) {
-                this.closeModalBtn.addEventListener('click', () => this.closeResult());
-            }
-            if (this.grantPermissionBtn) {
-                this.grantPermissionBtn.addEventListener('click', () => this.requstCameraPermission()); // typo: requst
-            }
-            if (this.copyButton) {
-                this.copyButton.addEventListener('click', () => this.copyToClipboard());
-            }
-            if (this.openButton) {
-                this.openButton.addEventListener('click', () => this.openLink());
-            }
-            if (this.helpButton) {
-                this.helpButton.addEventListener('click', () => this.showHelp());
-            }
-            if (this.closeHelpBtn) {
-                this.closeHelpBtn.addEventListener('click', () => this.closeHelp());
-            }
+            // Add both click and touchend events for iOS compatibility
+            const addClickAndTouch = (element, handler) => {
+                if (element) {
+                    element.addEventListener('click', handler, { passive: false });
+                    element.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        handler();
+                    }, { passive: false });
+                }
+            };
+
+            addClickAndTouch(this.startButton, () => this.startScanning());
+            addClickAndTouch(this.closeModalBtn, () => this.closeResult());
+            addClickAndTouch(this.grantPermissionBtn, () => this.requestCameraPermission());  // Fixed method name
+            addClickAndTouch(this.copyButton, () => this.copyToClipboard());
+            addClickAndTouch(this.openButton, () => this.openLink());
+            addClickAndTouch(this.helpButton, () => this.showHelp());
+            addClickAndTouch(this.closeHelpBtn, () => this.closeHelp());
+
             console.log('✅ Event listeners initialized');
         } catch (error) {
             console.error('Error setting up event listeners:', error);
@@ -113,7 +111,7 @@ class QRSafetyScanner {
             'i': ['і', 'ı', 'ⅰ', 'ｉ'],
             'j': ['ј', 'ⅼ', 'ｊ'],
             'k': ['к', 'ｋ'],
-            'l': ['ӏ', '1', 'ⅼ', 'ｌ', '|'],
+            'l': ['Ӏ', '1', 'ⅼ', 'ｌ', '|'],
             'm': ['м', 'ⅿ', 'ｍ'],
             'n': ['п', 'ｎ'],
             'o': ['о', '0', 'ο', 'ｏ', 'ø', 'ф'],
@@ -122,7 +120,7 @@ class QRSafetyScanner {
             'r': ['г', 'ｒ'],
             's': ['ѕ', 'ｓ'],
             't': ['т', 'ｔ'],
-            'u': ['ս', 'ｕ', 'ц'],
+            'u': ['υ', 'ｕ', 'ц'],
             'v': ['ν', 'ⅴ', 'ｖ'],
             'w': ['ԝ', 'ⅿ', 'ｗ', 'ш'],
             'x': ['х', 'ⅹ', 'ｘ'],
@@ -131,7 +129,7 @@ class QRSafetyScanner {
             // Capital letters
             'A': ['А', 'Α', 'Ａ'],
             'B': ['В', 'Β', 'Ｂ'],
-            'C': ['С', 'Ϲ', 'Ｃ'],
+            'C': ['С', 'Ͻ', 'Ｃ'],
             'E': ['Е', 'Ε', 'Ｅ'],
             'H': ['Н', 'Η', 'Ｈ'],
             'I': ['І', 'Ι', 'Ｉ', '|'],
@@ -147,7 +145,7 @@ class QRSafetyScanner {
             'Z': ['Ζ', 'Ｚ'],
             // Numbers
             '0': ['О', 'о', 'O', 'o', 'Ο', 'ο', 'Ｏ', 'ｏ'],
-            '1': ['l', 'I', 'ӏ', '|', 'ｌ', 'Ｉ'],
+            '1': ['l', 'I', 'Ӏ', '|', 'ｌ', 'Ｉ'],
             '6': ['б'],
             '9': ['g']
         };
@@ -165,18 +163,13 @@ class QRSafetyScanner {
     }
 
     async checkBrowserAI() {
-        // Check for browser AI capabilities
         this.hasAI = false;
         this.aiSession = null;
 
         try {
-            // Check for Chrome's Window AI API (experimental)
-            // To enable: chrome://flags/#optimization-guide-on-device-model
-            // Enable "Enables optimization guide on device" flag
             if (typeof window.ai !== 'undefined' && window.ai) {
                 console.log('🤖 Browser AI API detected!');
 
-                // Check if we can create a session
                 if (window.ai.canCreateTextSession) {
                     try {
                         const canUse = await window.ai.canCreateTextSession();
@@ -194,7 +187,6 @@ class QRSafetyScanner {
                     }
                 }
 
-                // Try direct session creation
                 if (window.ai.createTextSession) {
                     try {
                         this.aiSession = await window.ai.createTextSession();
@@ -204,21 +196,10 @@ class QRSafetyScanner {
                         return true;
                     } catch (e) {
                         console.log('⚠️ AI API exists but session creation failed:', e);
-                        console.log('To enable Chrome AI:');
-                        console.log('1. Go to chrome://flags/#optimization-guide-on-device-model');
-                        console.log('2. Enable "Optimization guide on device model"');
-                        console.log('3. Restart Chrome');
                     }
                 }
             }
 
-            // Check for other browser AI APIs
-            if (typeof window.ml !== 'undefined' && window.ml) {
-                console.log('ML API detected');
-                this.hasML = true;
-            }
-
-            // Check for WebGPU (can be used for local AI models)
             if ('gpu' in navigator) {
                 try {
                     const adapter = await navigator.gpu.requestAdapter();
@@ -285,9 +266,7 @@ class QRSafetyScanner {
             console.log('AI Response received:', response);
 
             try {
-                // Clean response and parse JSON
                 let cleanResponse = response.trim();
-                // Remove markdown code blocks if present
                 cleanResponse = cleanResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
 
                 const aiAnalysis = JSON.parse(cleanResponse);
@@ -295,7 +274,6 @@ class QRSafetyScanner {
                 return aiAnalysis;
             } catch (parseError) {
                 console.log('Failed to parse AI response as JSON:', parseError);
-                // Try to extract insights from text
                 return this.parseAITextResponse(response);
             }
         } catch (error) {
@@ -306,7 +284,6 @@ class QRSafetyScanner {
 
     parseAITextResponse(text) {
         try {
-            // Extract insights from non-JSON AI response
             const analysis = {
                 riskLevel: 'medium',
                 threats: [],
@@ -314,7 +291,6 @@ class QRSafetyScanner {
                 explanation: text.substring(0, 200)
             };
 
-            // Look for risk indicators in text
             const lowerText = text.toLowerCase();
             if (lowerText.includes('high risk') || lowerText.includes('dangerous') || lowerText.includes('malicious')) {
                 analysis.riskLevel = 'high';
@@ -324,7 +300,6 @@ class QRSafetyScanner {
                 analysis.aiConfidence = 85;
             }
 
-            // Extract specific threats mentioned
             const threatKeywords = ['phishing', 'malware', 'scam', 'fake', 'suspicious', 'typosquatting'];
             threatKeywords.forEach(threat => {
                 if (lowerText.includes(threat)) {
@@ -339,32 +314,26 @@ class QRSafetyScanner {
         }
     }
 
-    initAIPatterens() {
-        // First check for browser AI
+    initAIPatterns() {  // Fixed method name
         this.checkBrowserAI().then(hasAI => {
             if (hasAI) {
                 console.log('🤖 Using real browser AI for analysis');
             } else {
                 console.log('📊 Using pattern-based analysis');
-                console.log('💡 To enable Chrome AI:');
-                console.log('   1. Use Chrome Canary or Dev channel');
-                console.log('   2. Go to chrome://flags/#optimization-guide-on-device-model');
-                console.log('   3. Enable the flag and restart Chrome');
             }
         }).catch(error => {
             console.error('Error initializing AI:', error);
         });
 
-        // Enhanced AI patterns for better threat detection (fallback)
         this.threatPatterns = {
             phishing: {
                 keywords: ['verify', 'suspend', 'confirm', 'update', 'expired', 'locked', 'secure', 'bank', 'paypal', 'amazon', 'apple', 'microsoft', 'google', 'account', 'urgent', 'immediately'],
                 patterns: [
-                    /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/, // IP addresses
-                    /@/, // @ symbol in URL
-                    /[0-9]{4,}/, // Long numbers in domain
-                    /-{2,}/, // Multiple hyphens
-                    /xn--/, // Punycode domains
+                    /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/,
+                    /@/,
+                    /[0-9]{4,}/,
+                    /-{2,}/,
+                    /xn--/,
                 ],
                 suspiciousTLDs: ['.tk', '.ml', '.ga', '.cf', '.click', '.download', '.review', '.top', '.work']
             },
@@ -382,7 +351,6 @@ class QRSafetyScanner {
             ]
         };
 
-        // threat database simulation
         this.threatDatabase = {
             knownPhishing: [
                 'secure-bank-update.com',
@@ -398,57 +366,16 @@ class QRSafetyScanner {
             ]
         };
     }
-            phishing: {
-                keywords: ['verify', 'suspend', 'confirm', 'update', 'expired', 'locked', 'secure', 'bank', 'paypal', 'amazon', 'apple', 'microsoft', 'google','account','urgent','immediately'],
-                patterns: [
-                    /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/, // IP addresses
-                    /@/, // @ symbol in URL
-                    /[0-9]{4,}/, // Long numbers in domain
-                    /-{2,}/, // Multiple hyphens
-                    /xn--/, // Punycode domains
-                ],
-                suspiciousTLDs: ['.tk', '.ml', '.ga', '.cf', '.click', '.download', '.review','.top','.work']
-            },
-            malware: {
-                keywords: ['download', 'install', 'update', 'flash', 'player', 'java', 'plugin','free','crack','keygen'],
-                extensions: ['.exe', '.zip', '.rar', '.bat', '.cmd', '.scr', '.vbs', '.jar','.apk','.msi']
-            },
-            shorteners: {
-                domains: ['bit.ly', 'tinyurl.com', 'goo.gl', 'ow.ly', 'short.link', 't.co', 'buff.ly', 'is.gd', 'tr.im','rebrand.ly']
-            },
-            trustedDomains: [
-                'google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com',
-                'linkedin.com', 'github.com', 'stackoverflow.com', 'wikipedia.org', 'amazon.com',
-                'apple.com', 'microsoft.com', 'netflix.com', 'spotify.com', 'reddit.com'
-            ]
-        };
-
-        // threat database simulation
-        this.threatDatabase = {
-            knownPhishing: [
-                'secure-bank-update.com',
-                'paypal-verification.net',
-                'amazon-security.org',
-                'apple-id-locked.com',
-                'microsoft-account-verify.net'
-            ],
-            knownMalware:[
-                'malware-download.com',
-                'free-software-crack.net',
-                'virus-infected.org'
-            ]
-        };
-    }
 
     detectHomoglyphs(text) {
-        const suspicous = [];  // typo: suspicous
+        const suspicious = [];  // Fixed typo
         const chars = [...text];
 
         for(let i = 0; i < chars.length; i++) {
             const char = chars[i];
 
             if (this.reverseHomoglyphs[char]) {
-                suspicous.push({
+                suspicious.push({
                     position: i,
                     char: char,
                     original: this.reverseHomoglyphs[char],
@@ -462,8 +389,8 @@ class QRSafetyScanner {
             const isFullwidth = (charCode >= 0xFF00 && charCode <= 0xFFEF);
 
             if (isCyrillic || isGreek || isFullwidth) {
-                if (!suspicous.find(s => s.position === i)) {
-                    suspicous.push({
+                if (!suspicious.find(s => s.position === i)) {
+                    suspicious.push({
                         position: i,
                         char: char,
                         type: isCyrillic ? 'Cyrillic' : isGreek ? 'Greek' : 'Fullwidth',
@@ -473,10 +400,10 @@ class QRSafetyScanner {
             }
         }
 
-        return suspicous;
+        return suspicious;
     }
 
-    async requstCameraPermission() {  // typo in method name
+    async requestCameraPermission() {  // Fixed method name
         try {
             this.permissionScreen.style.display = 'none';
             await this.initCamera();
@@ -546,7 +473,6 @@ class QRSafetyScanner {
                 this.lastScannedCode = code.data;
                 this.handleQRCode(code.data);
                 this.vibrateDevice();
-                // Stop scanning when QR code is detected
                 this.scanning = false;
                 this.stopCamera();
             }
@@ -573,20 +499,18 @@ class QRSafetyScanner {
 
     handleQRCode(data) {
         this.showResult(data);
-        this.analizeURL(data);  // typo: analize
-        this.checkExternalServises(data); // typo: Servises
+        this.analyzeURL(data);  // Fixed typo
+        this.checkExternalServices(data);  // Fixed typo
     }
 
     showResult(url) {
         document.getElementById('urlDisplay').textContent = url;
         this.resultModal.classList.add('active');
-        // Show buttons container
         if(this.buttonsContainer) {
             this.buttonsContainer.style.transform = 'translateY(0)';
         }
         this.loadingSpinner.classList.add('active');
 
-        // Reset external check statuses
         ['virustotal', 'google', 'phishtank', 'urlvoid'].forEach(service => {
             document.getElementById(`${service}Status`).innerHTML = '<div class="status-loading"></div>';
             document.getElementById(`${service}Details`).style.display = 'none';
@@ -594,8 +518,7 @@ class QRSafetyScanner {
         });
     }
 
-    async checkExternalServises(url) {  // typo in method name
-        // Enhanced AI-based security checks simulation with detailed threats
+    async checkExternalServices(url) {  // Fixed method name
         const services = [
             { id: 'virustotal', name: 'VirusTotal', delay: 1500 },
             { id: 'google', name: 'Google Safe Browsing', delay: 1200 },
@@ -612,7 +535,6 @@ class QRSafetyScanner {
     }
 
     performDetailedSecurityCheck(url, serviceName) {
-        // Enhanced AI-based analysis with detailed threat info
         try {
             const urlObj = new URL(url);
             const domain = urlObj.hostname.toLowerCase();
@@ -621,7 +543,6 @@ class QRSafetyScanner {
             let threatDetails = [];
             let isSafe = true;
 
-            // Check against trusted domains
             if (this.threatPatterns.trustedDomains.some(trusted =>
                 domain === trusted || domain.endsWith('.' + trusted))) {
                 return {
@@ -631,7 +552,6 @@ class QRSafetyScanner {
                 };
             }
 
-            // Check against known threats database
             if(this.threatDatabase.knownPhishing.some(phish => domain.includes(phish))){
                 threatDetails.push({
                     type: 'Phishing',
@@ -650,7 +570,6 @@ class QRSafetyScanner {
                 isSafe = false;
             }
 
-            // Check for phishing patterns
             const hasPhishingKeyword = this.threatPatterns.phishing.keywords.some(keyword =>
                 domain.includes(keyword) || path.includes(keyword));
 
@@ -696,7 +615,6 @@ class QRSafetyScanner {
                 isSafe = false;
             }
 
-            // Check for malware indicators
             const hasMalwareKeyword = this.threatPatterns.malware.keywords.some(keyword =>
                 path.includes(keyword));
 
@@ -722,7 +640,6 @@ class QRSafetyScanner {
                 isSafe = false;
             }
 
-            // Check for URL shorteners
             if (this.threatPatterns.shorteners.domains.some(shortener =>
                 domain.includes(shortener))) {
                 threatDetails.push({
@@ -737,8 +654,7 @@ class QRSafetyScanner {
                 };
             }
 
-            // Simulate service-specific detections - higher chance for demo
-            if(serviceName === 'VirusTotal' && Math.random() > 0.3){  // 70% chance of detection
+            if(serviceName === 'VirusTotal' && Math.random() > 0.3){
                 threatDetails.push({
                     type: 'Community Reports',
                     description: '3 users flagged as suspicious',
@@ -764,7 +680,7 @@ class QRSafetyScanner {
             }
 
             return {
-                safe: false,  // Always false when threats are found
+                safe: false,
                 message: 'Threats found',
                 details: threatDetails
             };
@@ -786,7 +702,6 @@ class QRSafetyScanner {
             statusElement.innerHTML = '<span class="status-icon">✅</span> ' + status.message;
             statusElement.style.color = 'var(--success)';
         } else if (status.safe === false || (status.details && status.details.length > 0)) {
-            // Show red warning for any threats found
             statusElement.innerHTML = '<span class="status-icon">❌</span> ' + status.message;
             statusElement.style.color = 'var(--danger)';
         } else {
@@ -794,7 +709,6 @@ class QRSafetyScanner {
             statusElement.style.color = 'var(--text-secondary)';
         }
 
-        // Show detailed threats if any
         if(status.details && status.details.length > 0){
             let detailsHTML = '';
             status.details.forEach(threat => {
@@ -811,20 +725,17 @@ class QRSafetyScanner {
         }
     }
 
-    analizeURL(url) {  // typo in method name
-        // Try real AI first if available
+    analyzeURL(url) {  // Fixed method name
         if (this.hasAI) {
             console.log('🤖 Using browser AI for analysis...');
             this.analyzeWithAI(url).then(aiResult => {
                 if (aiResult) {
-                    // Use real AI results
                     setTimeout(() => {
                         const analysis = this.mergeAIWithPatternAnalysis(url, aiResult);
                         this.displayAnalysis(analysis);
                         this.loadingSpinner.classList.remove('active');
                     }, 1500);
                 } else {
-                    // Fallback to pattern analysis
                     this.performPatternAnalysis(url);
                 }
             }).catch(error => {
@@ -832,7 +743,6 @@ class QRSafetyScanner {
                 this.performPatternAnalysis(url);
             });
         } else {
-            // Direct pattern-based analysis
             this.performPatternAnalysis(url);
         }
     }
@@ -840,7 +750,7 @@ class QRSafetyScanner {
     performPatternAnalysis(url) {
         console.log('📊 Using pattern-based analysis...');
         setTimeout(() => {
-            const analysis = this.performAdvancedAIAnalisys(url);  // typo: Analisys
+            const analysis = this.performAdvancedAIAnalysis(url);  // Fixed typo
             this.displayAnalysis(analysis);
             this.loadingSpinner.classList.remove('active');
         }, 2500);
@@ -848,10 +758,8 @@ class QRSafetyScanner {
 
     mergeAIWithPatternAnalysis(url, aiResult) {
         try {
-            // Start with pattern analysis for structure
-            const analysis = this.performAdvancedAIAnalisys(url);
+            const analysis = this.performAdvancedAIAnalysis(url);  // Fixed typo
 
-            // Override with AI insights
             if (aiResult.riskLevel) {
                 analysis.riskLevel = aiResult.riskLevel;
             }
@@ -861,7 +769,6 @@ class QRSafetyScanner {
             }
 
             if (aiResult.threats && aiResult.threats.length > 0) {
-                // Add AI-detected threats to warnings
                 aiResult.threats.forEach(threat => {
                     if (!analysis.warnings.includes(threat)) {
                         analysis.warnings.push(`[AI] ${threat}`);
@@ -873,17 +780,16 @@ class QRSafetyScanner {
                 analysis.aiExplanation = aiResult.explanation;
             }
 
-            // Mark as AI-analyzed
             analysis.usedRealAI = true;
 
             return analysis;
         } catch (e) {
             console.error('Error merging AI analysis:', e);
-            return this.performAdvancedAIAnalisys(url);
+            return this.performAdvancedAIAnalysis(url);  // Fixed typo
         }
     }
 
-    performAdvancedAIAnalisys(url) {  // typo in method name
+    performAdvancedAIAnalysis(url) {  // Fixed method name
         const analysis = {
             url: url,
             isSafe: true,
@@ -891,7 +797,7 @@ class QRSafetyScanner {
             warnings: [],
             details: {},
             homoglyphs: [],
-            aiScore: 100 // AI confidence score
+            aiScore: 100
         };
 
         try {
@@ -899,7 +805,6 @@ class QRSafetyScanner {
             const domain = urlObj.hostname.toLowerCase();
             const path = urlObj.pathname.toLowerCase();
 
-            // Protocol check
             analysis.details.protocol = urlObj.protocol;
             if (urlObj.protocol !== 'https:') {
                 analysis.warnings.push('Insecure connection (HTTP)');
@@ -907,10 +812,8 @@ class QRSafetyScanner {
                 analysis.aiScore -= 20;
             }
 
-            // Domain analysis
             analysis.details.domain = urlObj.hostname;
 
-            // Homoglyph detection
             const homoglyphs = this.detectHomoglyphs(urlObj.hostname);
             if (homoglyphs.length > 0) {
                 analysis.homoglyphs = homoglyphs;
@@ -919,7 +822,6 @@ class QRSafetyScanner {
                 analysis.aiScore -= 40;
             }
 
-            // URL shortener detection
             if (this.threatPatterns.shorteners.domains.some(shortener =>
                 domain.includes(shortener))) {
                 analysis.warnings.push('Shortened URL - destination unknown');
@@ -930,14 +832,12 @@ class QRSafetyScanner {
                 analysis.details.linkType = 'Direct';
             }
 
-            // IP address check
             if (/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/.test(domain)) {
                 analysis.warnings.push('IP address instead of domain name');
                 analysis.riskLevel = 'high';
                 analysis.aiScore -= 30;
             }
 
-            // Suspicious TLD check
             if (this.threatPatterns.phishing.suspiciousTLDs.some(tld =>
                 domain.endsWith(tld))) {
                 analysis.warnings.push('Suspicious top-level domain');
@@ -945,10 +845,9 @@ class QRSafetyScanner {
                 analysis.aiScore -= 25;
             }
 
-            // Typosquatting detection
             for (const trusted of this.threatPatterns.trustedDomains) {
-                const similairity = this.calculateSimilarity(domain, trusted);  // typo: similairity
-                if (similairity > 0.7 && similairity < 0.95) {
+                const similarity = this.calculateSimilarity(domain, trusted);  // Fixed typo
+                if (similarity > 0.7 && similarity < 0.95) {
                     analysis.warnings.push(`Similar to ${trusted} (possible typosquatting)`);
                     analysis.riskLevel = 'high';
                     analysis.aiScore -= 35;
@@ -956,7 +855,6 @@ class QRSafetyScanner {
                 }
             }
 
-            // Phishing keyword detection
             const phishingScore = this.calculatePhishingScore(url);
             if (phishingScore > 50) {
                 analysis.warnings.push('Contains phishing indicators');
@@ -964,7 +862,6 @@ class QRSafetyScanner {
                 analysis.aiScore -= phishingScore / 2;
             }
 
-            // check known threats
             if(this.threatDatabase.knownPhishing.some(phish => domain.includes(phish))){
                 analysis.warnings.push('Known phishing site');
                 analysis.riskLevel = 'high';
@@ -977,7 +874,6 @@ class QRSafetyScanner {
                 analysis.aiScore = 0;
             }
 
-            // Determine final risk level based on AI score
             if (analysis.aiScore >= 80) {
                 analysis.riskLevel = 'low';
                 analysis.isSafe = true;
@@ -990,7 +886,6 @@ class QRSafetyScanner {
             }
 
         } catch (e) {
-            // Not a valid URL - might be plain text
             analysis.isSafe = true;
             analysis.riskLevel = 'low';
             analysis.details.type = 'text';
@@ -1004,7 +899,6 @@ class QRSafetyScanner {
         let score = 0;
         const urlLower = url.toLowerCase();
 
-        // Check for multiple suspicious keywords
         const suspiciousKeywords = [
             'verify', 'confirm', 'update', 'suspend', 'locked',
             'secure', 'account', 'billing', 'payment', 'expired','refund','alert'
@@ -1016,7 +910,6 @@ class QRSafetyScanner {
             }
         }
 
-        // Check for urgency indicators
         const urgencyWords = ['urgent', 'immediate', 'quickly', 'expire', '24hour', '48hour','asap','now'];
         for (const word of urgencyWords) {
             if (urlLower.includes(word)) {
@@ -1024,7 +917,6 @@ class QRSafetyScanner {
             }
         }
 
-        // Check for deceptive patterns
         if (urlLower.includes('@')) score += 30;
         if (urlLower.includes('//')) score += 20;
         if (/[0-9]{4,}/.test(urlLower)) score += 15;
@@ -1076,11 +968,9 @@ class QRSafetyScanner {
         const safetyTitle = document.getElementById('safetyTitle');
         const safetyDescription = document.getElementById('safetyDescription');
 
-        // Show if real AI was used
         const aiIndicator = analysis.usedRealAI ? ' 🤖' : '';
         const analysisMethod = analysis.usedRealAI ? 'Browser AI Analysis' : 'Pattern Analysis';
 
-        // Update safety indicator based on AI analysis
         if (analysis.riskLevel === 'low') {
             safetyIcon.className = 'safety-icon safe';
             safetyEmoji.textContent = '✅';
@@ -1104,9 +994,7 @@ class QRSafetyScanner {
             this.openButton.textContent = 'Open (Not Recommended)';
         }
 
-        // Show AI explanation if available
         if (analysis.aiExplanation) {
-            // Remove any existing AI note first
             const existingNote = document.querySelector('.ai-insight-note');
             if (existingNote) {
                 existingNote.remove();
@@ -1119,7 +1007,6 @@ class QRSafetyScanner {
             safetyDescription.parentElement.appendChild(aiNote);
         }
 
-        // Display homoglyph warning if detected
         if (analysis.homoglyphs && analysis.homoglyphs.length > 0) {
             this.homoglyphWarning.classList.add('active');
             const details = document.getElementById('homoglyphDetails');
@@ -1136,7 +1023,6 @@ class QRSafetyScanner {
             this.homoglyphWarning.classList.remove('active');
         }
 
-        // Update analysis details
         document.getElementById('protocolValue').textContent =
             analysis.details.protocol === 'https:' ? 'HTTPS ✅' :
             analysis.details.protocol === 'http:' ? 'HTTP ⚠️' :
@@ -1161,18 +1047,15 @@ class QRSafetyScanner {
             analysis.riskLevel === 'medium' ? 'Medium ⚠️' :
             'High ⛔';
 
-        // Save analysis for button actions
         this.currentAnalysis = analysis;
     }
 
     closeResult() {
         this.resultModal.classList.remove('active');
-        // Hide buttons container
         if(this.buttonsContainer) {
             this.buttonsContainer.style.transform = 'translateY(100%)';
         }
 
-        // Clean up AI insight notes
         const existingNote = document.querySelector('.ai-insight-note');
         if (existingNote) {
             existingNote.remove();
@@ -1180,7 +1063,6 @@ class QRSafetyScanner {
 
         this.lastScannedCode = null;
 
-        // Restart scanning
         this.startButton.style.display = 'block';
         this.startButton.textContent = 'Scan Another Code';
     }
@@ -1188,7 +1070,7 @@ class QRSafetyScanner {
     copyToClipboard() {
         const url = document.getElementById('urlDisplay').textContent;
         navigator.clipboard.writeText(url).then(() => {
-            this.copyButton.textContent = 'Copied ✓';
+            this.copyButton.textContent = 'Copied ✔';
             setTimeout(() => {
                 this.copyButton.textContent = 'Copy Link';
             }, 2000);
@@ -1222,9 +1104,10 @@ class QRSafetyScanner {
     }
 }
 
-// Initialize the app
+// Initialize the app with better error handling and iOS compatibility
 document.addEventListener('DOMContentLoaded', () => {
     try {
+        console.log('DOM loaded, initializing scanner...');
         const scanner = new QRSafetyScanner();
 
         // Handle app visibility changes
@@ -1233,6 +1116,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 scanner.stopScanning();
             }
         });
+
+        // Add iOS-specific viewport handling
+        if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+            document.documentElement.style.height = '100%';
+            document.body.style.height = '100%';
+        }
 
         console.log('✅ QR Scanner initialized successfully');
     } catch (error) {
