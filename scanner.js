@@ -1,52 +1,101 @@
 class QRSafetyScanner {
     constructor() {
-        this.video = document.getElementById('video');
-        this.canvas = document.getElementById('canvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.scanning = false;
-        this.stream = null;
-        this.lastScannedCode = null;
-        this.hasAI = false;  // Track AI availability
-        this.aiSession = null;  // Store AI session
-        this.initilizeElements();  // typo: initilize
-        this.initEventListners(); // typo: Listners
-        this.initHomoglyphMap();
-        this.initAIPatterens(); // typo: Patterens
+        try {
+            this.video = document.getElementById('video');
+            this.canvas = document.getElementById('canvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.scanning = false;
+            this.stream = null;
+            this.lastScannedCode = null;
+            this.hasAI = false;  // Track AI availability
+            this.aiSession = null;  // Store AI session
+            this.initilizeElements();  // typo: initilize
+            this.initEventListners(); // typo: Listners
+            this.initHomoglyphMap();
+            this.initAIPatterens(); // typo: Patterens
+        } catch (error) {
+            console.error('Error in scanner constructor:', error);
+        }
     }
 
     initilizeElements() {
-        this.startButton = document.getElementById('startButton');
-        this.resultModal = document.getElementById('resultModal');
-        this.closeModalBtn = document.getElementById('closeModal');
-        this.permissionScreen = document.getElementById('permissionScreen');
-        this.grantPermissionBtn = document.getElementById('grantPermission');
-        this.loadingSpinner = document.querySelector('.loading-spinner');
-        this.copyButton = document.getElementById('copyButton');
-        this.openButton = document.getElementById('openButton');
-        this.homoglyphWarning = document.getElementById('homoglyphWarning');
-        this.externalChecks = document.getElementById('externalChecks');
-        this.helpButton = document.getElementById('helpButton');
-        this.helpModal = document.getElementById('helpModal');
-        this.closeHelpBtn = document.getElementById('closeHelp');
-        this.buttonsContainer = document.querySelector('.action-buttons-container');
+        try {
+            this.startButton = document.getElementById('startButton');
+            this.resultModal = document.getElementById('resultModal');
+            this.closeModalBtn = document.getElementById('closeModal');
+            this.permissionScreen = document.getElementById('permissionScreen');
+            this.grantPermissionBtn = document.getElementById('grantPermission');
+            this.loadingSpinner = document.querySelector('.loading-spinner');
+            this.copyButton = document.getElementById('copyButton');
+            this.openButton = document.getElementById('openButton');
+            this.homoglyphWarning = document.getElementById('homoglyphWarning');
+            this.externalChecks = document.getElementById('externalChecks');
+            this.helpButton = document.getElementById('helpButton');
+            this.helpModal = document.getElementById('helpModal');
+            this.closeHelpBtn = document.getElementById('closeHelp');
+            this.buttonsContainer = document.querySelector('.action-buttons-container');
+
+            // Check critical elements
+            if (!this.startButton) {
+                console.error('Start button not found!');
+            }
+            if (!this.helpButton) {
+                console.error('Help button not found!');
+            }
+
+            console.log('✅ Elements initialized');
+        } catch (error) {
+            console.error('Error initializing elements:', error);
+        }
     }
 
     initEventListners() {
-        this.startButton.addEventListener('click', () => this.startScanning());
-        this.closeModalBtn.addEventListener('click', () => this.closeResult());
-        this.grantPermissionBtn.addEventListener('click', () => this.requstCameraPermission()); // typo: requst
-        this.copyButton.addEventListener('click', () => this.copyToClipboard());
-        this.openButton.addEventListener('click', () => this.openLink());
-        this.helpButton.addEventListener('click', () => this.showHelp());
-        this.closeHelpBtn.addEventListener('click', () => this.closeHelp());
+        try {
+            if (this.startButton) {
+                this.startButton.addEventListener('click', () => this.startScanning());
+            }
+            if (this.closeModalBtn) {
+                this.closeModalBtn.addEventListener('click', () => this.closeResult());
+            }
+            if (this.grantPermissionBtn) {
+                this.grantPermissionBtn.addEventListener('click', () => this.requstCameraPermission()); // typo: requst
+            }
+            if (this.copyButton) {
+                this.copyButton.addEventListener('click', () => this.copyToClipboard());
+            }
+            if (this.openButton) {
+                this.openButton.addEventListener('click', () => this.openLink());
+            }
+            if (this.helpButton) {
+                this.helpButton.addEventListener('click', () => this.showHelp());
+            }
+            if (this.closeHelpBtn) {
+                this.closeHelpBtn.addEventListener('click', () => this.closeHelp());
+            }
+            console.log('✅ Event listeners initialized');
+        } catch (error) {
+            console.error('Error setting up event listeners:', error);
+        }
     }
 
-    showHelp(){
-        this.helpModal.classList.add('active');
+    showHelp() {
+        try {
+            if (this.helpModal) {
+                this.helpModal.classList.add('active');
+            }
+        } catch (e) {
+            console.error('Error showing help:', e);
+        }
     }
 
     closeHelp() {
-        this.helpModal.classList.remove('active');
+        try {
+            if (this.helpModal) {
+                this.helpModal.classList.remove('active');
+            }
+        } catch (e) {
+            console.error('Error closing help:', e);
+        }
     }
 
     initHomoglyphMap() {
@@ -126,35 +175,39 @@ class QRSafetyScanner {
             // Enable "Enables optimization guide on device" flag
             if (typeof window.ai !== 'undefined' && window.ai) {
                 console.log('🤖 Browser AI API detected!');
-                try {
-                    // Try to create an AI session
-                    this.aiSession = await window.ai.createTextSession();
-                    this.hasAI = true;
-                    console.log('✅ AI session created successfully');
-                    this.showAIStatus(true);
-                    return true;
-                } catch (e) {
-                    console.log('⚠️ AI API exists but session creation failed:', e);
-                    console.log('To enable Chrome AI:');
-                    console.log('1. Go to chrome://flags/#optimization-guide-on-device-model');
-                    console.log('2. Enable "Optimization guide on device model"');
-                    console.log('3. Restart Chrome');
-                }
-            }
 
-            // Check for Gemini Nano availability
-            if (typeof window.ai !== 'undefined' && window.ai?.canCreateTextSession) {
-                const canUse = await window.ai.canCreateTextSession();
-                console.log('Gemini Nano availability:', canUse);
-                if (canUse === 'readily') {
+                // Check if we can create a session
+                if (window.ai.canCreateTextSession) {
+                    try {
+                        const canUse = await window.ai.canCreateTextSession();
+                        console.log('Gemini Nano availability:', canUse);
+
+                        if (canUse === 'readily') {
+                            this.aiSession = await window.ai.createTextSession();
+                            this.hasAI = true;
+                            console.log('✅ AI session created successfully');
+                            this.showAIStatus(true);
+                            return true;
+                        }
+                    } catch (e) {
+                        console.log('⚠️ Cannot check AI availability:', e);
+                    }
+                }
+
+                // Try direct session creation
+                if (window.ai.createTextSession) {
                     try {
                         this.aiSession = await window.ai.createTextSession();
                         this.hasAI = true;
-                        console.log('✅ Gemini Nano session created');
+                        console.log('✅ AI session created successfully');
                         this.showAIStatus(true);
                         return true;
                     } catch (e) {
-                        console.log('Gemini Nano session failed:', e);
+                        console.log('⚠️ AI API exists but session creation failed:', e);
+                        console.log('To enable Chrome AI:');
+                        console.log('1. Go to chrome://flags/#optimization-guide-on-device-model');
+                        console.log('2. Enable "Optimization guide on device model"');
+                        console.log('3. Restart Chrome');
                     }
                 }
             }
@@ -167,14 +220,18 @@ class QRSafetyScanner {
 
             // Check for WebGPU (can be used for local AI models)
             if ('gpu' in navigator) {
-                const adapter = await navigator.gpu.requestAdapter();
-                if (adapter) {
-                    console.log('WebGPU available for AI acceleration');
-                    this.hasWebGPU = true;
+                try {
+                    const adapter = await navigator.gpu.requestAdapter();
+                    if (adapter) {
+                        console.log('WebGPU available for AI acceleration');
+                        this.hasWebGPU = true;
+                    }
+                } catch (e) {
+                    console.log('WebGPU check failed:', e);
                 }
             }
         } catch (error) {
-            console.log('No browser AI available, using pattern matching:', error);
+            console.log('Error checking browser AI:', error);
         }
 
         this.showAIStatus(false);
@@ -182,16 +239,20 @@ class QRSafetyScanner {
     }
 
     showAIStatus(active) {
-        const aiStatus = document.getElementById('aiStatus');
-        if (aiStatus) {
-            aiStatus.style.display = 'flex';
-            if (active) {
-                aiStatus.classList.remove('inactive');
-                aiStatus.title = 'Browser AI Active - Using local LLM for analysis';
-            } else {
-                aiStatus.classList.add('inactive');
-                aiStatus.title = 'Browser AI not available - Using pattern matching';
+        try {
+            const aiStatus = document.getElementById('aiStatus');
+            if (aiStatus) {
+                aiStatus.style.display = 'flex';
+                if (active) {
+                    aiStatus.classList.remove('inactive');
+                    aiStatus.title = 'Browser AI Active - Using local LLM for analysis';
+                } else {
+                    aiStatus.classList.add('inactive');
+                    aiStatus.title = 'Browser AI not available - Using pattern matching';
+                }
             }
+        } catch (e) {
+            console.log('Could not update AI status indicator:', e);
         }
     }
 
@@ -219,9 +280,9 @@ class QRSafetyScanner {
                 "explanation": "One sentence explanation"
             }`;
 
-            console.log('Sending to AI:', prompt);
+            console.log('Sending prompt to AI...');
             const response = await this.aiSession.prompt(prompt);
-            console.log('AI Response:', response);
+            console.log('AI Response received:', response);
 
             try {
                 // Clean response and parse JSON
@@ -244,33 +305,38 @@ class QRSafetyScanner {
     }
 
     parseAITextResponse(text) {
-        // Extract insights from non-JSON AI response
-        const analysis = {
-            riskLevel: 'medium',
-            threats: [],
-            aiConfidence: 70,
-            explanation: text.substring(0, 200)
-        };
+        try {
+            // Extract insights from non-JSON AI response
+            const analysis = {
+                riskLevel: 'medium',
+                threats: [],
+                aiConfidence: 70,
+                explanation: text.substring(0, 200)
+            };
 
-        // Look for risk indicators in text
-        const lowerText = text.toLowerCase();
-        if (lowerText.includes('high risk') || lowerText.includes('dangerous') || lowerText.includes('malicious')) {
-            analysis.riskLevel = 'high';
-            analysis.aiConfidence = 90;
-        } else if (lowerText.includes('safe') || lowerText.includes('legitimate') || lowerText.includes('no threat')) {
-            analysis.riskLevel = 'low';
-            analysis.aiConfidence = 85;
-        }
-
-        // Extract specific threats mentioned
-        const threatKeywords = ['phishing', 'malware', 'scam', 'fake', 'suspicious', 'typosquatting'];
-        threatKeywords.forEach(threat => {
-            if (lowerText.includes(threat)) {
-                analysis.threats.push(threat.charAt(0).toUpperCase() + threat.slice(1) + ' detected');
+            // Look for risk indicators in text
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('high risk') || lowerText.includes('dangerous') || lowerText.includes('malicious')) {
+                analysis.riskLevel = 'high';
+                analysis.aiConfidence = 90;
+            } else if (lowerText.includes('safe') || lowerText.includes('legitimate') || lowerText.includes('no threat')) {
+                analysis.riskLevel = 'low';
+                analysis.aiConfidence = 85;
             }
-        });
 
-        return analysis;
+            // Extract specific threats mentioned
+            const threatKeywords = ['phishing', 'malware', 'scam', 'fake', 'suspicious', 'typosquatting'];
+            threatKeywords.forEach(threat => {
+                if (lowerText.includes(threat)) {
+                    analysis.threats.push(threat.charAt(0).toUpperCase() + threat.slice(1) + ' detected');
+                }
+            });
+
+            return analysis;
+        } catch (e) {
+            console.error('Error parsing AI text response:', e);
+            return null;
+        }
     }
 
     initAIPatterens() {
@@ -285,6 +351,8 @@ class QRSafetyScanner {
                 console.log('   2. Go to chrome://flags/#optimization-guide-on-device-model');
                 console.log('   3. Enable the flag and restart Chrome');
             }
+        }).catch(error => {
+            console.error('Error initializing AI:', error);
         });
 
         // Enhanced AI patterns for better threat detection (fallback)
@@ -409,13 +477,25 @@ class QRSafetyScanner {
     }
 
     async requstCameraPermission() {  // typo in method name
-        this.permissionScreen.style.display = 'none';
-        await this.initCamera();
+        try {
+            this.permissionScreen.style.display = 'none';
+            await this.initCamera();
+        } catch (error) {
+            console.error('Error requesting camera permission:', error);
+            this.permissionScreen.style.display = 'flex';
+        }
     }
 
     async startScanning() {
-        this.startButton.style.display = 'none';
-        await this.initCamera();
+        try {
+            console.log('Starting scanning...');
+            this.startButton.style.display = 'none';
+            await this.initCamera();
+        } catch (error) {
+            console.error('Error starting scanning:', error);
+            this.startButton.style.display = 'block';
+            alert('Failed to start scanning. Please try again.');
+        }
     }
 
     async initCamera() {
@@ -731,24 +811,33 @@ class QRSafetyScanner {
         }
     }
 
-    async analizeURL(url) {  // typo in method name
+    analizeURL(url) {  // typo in method name
         // Try real AI first if available
         if (this.hasAI) {
             console.log('🤖 Using browser AI for analysis...');
-            const aiResult = await this.analyzeWithAI(url);
-
-            if (aiResult) {
-                // Use real AI results
-                setTimeout(() => {
-                    const analysis = this.mergeAIWithPatternAnalysis(url, aiResult);
-                    this.displayAnalysis(analysis);
-                    this.loadingSpinner.classList.remove('active');
-                }, 1500);
-                return;
-            }
+            this.analyzeWithAI(url).then(aiResult => {
+                if (aiResult) {
+                    // Use real AI results
+                    setTimeout(() => {
+                        const analysis = this.mergeAIWithPatternAnalysis(url, aiResult);
+                        this.displayAnalysis(analysis);
+                        this.loadingSpinner.classList.remove('active');
+                    }, 1500);
+                } else {
+                    // Fallback to pattern analysis
+                    this.performPatternAnalysis(url);
+                }
+            }).catch(error => {
+                console.error('AI analysis error:', error);
+                this.performPatternAnalysis(url);
+            });
+        } else {
+            // Direct pattern-based analysis
+            this.performPatternAnalysis(url);
         }
+    }
 
-        // Fallback to pattern-based analysis
+    performPatternAnalysis(url) {
         console.log('📊 Using pattern-based analysis...');
         setTimeout(() => {
             const analysis = this.performAdvancedAIAnalisys(url);  // typo: Analisys
@@ -758,35 +847,40 @@ class QRSafetyScanner {
     }
 
     mergeAIWithPatternAnalysis(url, aiResult) {
-        // Start with pattern analysis for structure
-        const analysis = this.performAdvancedAIAnalisys(url);
+        try {
+            // Start with pattern analysis for structure
+            const analysis = this.performAdvancedAIAnalisys(url);
 
-        // Override with AI insights
-        if (aiResult.riskLevel) {
-            analysis.riskLevel = aiResult.riskLevel;
+            // Override with AI insights
+            if (aiResult.riskLevel) {
+                analysis.riskLevel = aiResult.riskLevel;
+            }
+
+            if (aiResult.aiConfidence !== undefined) {
+                analysis.aiScore = aiResult.aiConfidence;
+            }
+
+            if (aiResult.threats && aiResult.threats.length > 0) {
+                // Add AI-detected threats to warnings
+                aiResult.threats.forEach(threat => {
+                    if (!analysis.warnings.includes(threat)) {
+                        analysis.warnings.push(`[AI] ${threat}`);
+                    }
+                });
+            }
+
+            if (aiResult.explanation) {
+                analysis.aiExplanation = aiResult.explanation;
+            }
+
+            // Mark as AI-analyzed
+            analysis.usedRealAI = true;
+
+            return analysis;
+        } catch (e) {
+            console.error('Error merging AI analysis:', e);
+            return this.performAdvancedAIAnalisys(url);
         }
-
-        if (aiResult.aiConfidence !== undefined) {
-            analysis.aiScore = aiResult.aiConfidence;
-        }
-
-        if (aiResult.threats && aiResult.threats.length > 0) {
-            // Add AI-detected threats to warnings
-            aiResult.threats.forEach(threat => {
-                if (!analysis.warnings.includes(threat)) {
-                    analysis.warnings.push(`[AI] ${threat}`);
-                }
-            });
-        }
-
-        if (aiResult.explanation) {
-            analysis.aiExplanation = aiResult.explanation;
-        }
-
-        // Mark as AI-analyzed
-        analysis.usedRealAI = true;
-
-        return analysis;
     }
 
     performAdvancedAIAnalisys(url) {  // typo in method name
@@ -1012,7 +1106,14 @@ class QRSafetyScanner {
 
         // Show AI explanation if available
         if (analysis.aiExplanation) {
+            // Remove any existing AI note first
+            const existingNote = document.querySelector('.ai-insight-note');
+            if (existingNote) {
+                existingNote.remove();
+            }
+
             const aiNote = document.createElement('div');
+            aiNote.className = 'ai-insight-note';
             aiNote.style.cssText = 'margin-top: 10px; padding: 10px; background: rgba(0,122,255,0.1); border-radius: 8px; font-size: 12px; color: #5AC8FA;';
             aiNote.innerHTML = `<strong>AI Insight:</strong> ${analysis.aiExplanation}`;
             safetyDescription.parentElement.appendChild(aiNote);
@@ -1070,6 +1171,13 @@ class QRSafetyScanner {
         if(this.buttonsContainer) {
             this.buttonsContainer.style.transform = 'translateY(100%)';
         }
+
+        // Clean up AI insight notes
+        const existingNote = document.querySelector('.ai-insight-note');
+        if (existingNote) {
+            existingNote.remove();
+        }
+
         this.lastScannedCode = null;
 
         // Restart scanning
@@ -1116,12 +1224,19 @@ class QRSafetyScanner {
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
-    const scanner = new QRSafetyScanner();
+    try {
+        const scanner = new QRSafetyScanner();
 
-    // Handle app visibility changes
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden && scanner.scanning) {
-            scanner.stopScanning();
-        }
-    });
+        // Handle app visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && scanner.scanning) {
+                scanner.stopScanning();
+            }
+        });
+
+        console.log('✅ QR Scanner initialized successfully');
+    } catch (error) {
+        console.error('❌ Failed to initialize QR Scanner:', error);
+        alert('Error initializing scanner. Please refresh the page.');
+    }
 });
