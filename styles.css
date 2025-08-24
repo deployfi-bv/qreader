@@ -191,18 +191,18 @@ body {
 }
 
 .result-modal {
-    position: absolute;
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     background: var(--bg-secondary);
     border-radius: 20px 20px 0 0;
     padding: 20px;
-    padding-bottom: calc(var(--safe-area-bottom) + 20px);
+    padding-bottom: 120px; /* Space for fixed buttons */
     transform: translateY(100%);
     transition: transform 0.3s ease;
     z-index: 30;
-    max-height: 85vh;
+    max-height: calc(100vh - 60px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -450,17 +450,17 @@ display: block;
 
 /* Fixed button container for iPhone */
 .action-buttons-container {
-    position: sticky;
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     background: var(--bg-secondary);
-    padding: 15px 0;
-    margin: 0 -20px -20px;
-    padding-left: 20px;
-    padding-right: 20px;
-    padding-bottom: calc(var(--safe-area-bottom) + 15px);
-    border-top: 1px solid rgba(255,255,255,0.05);
+    padding: 15px 20px;
+    padding-bottom: calc(var(--safe-area-bottom) + 20px);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    z-index: 35;
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.3);
+    transition: transform 0.3s ease;
 }
 
 .action-buttons {
@@ -666,13 +666,20 @@ canvas {
 }
 
 /* Mobile fixes */
-@media (max-width: 390px) {
+@media (max-width: 414px) {
+    .result-modal {
+        max-height: calc(100vh - 40px);
+        padding-bottom: 100px;
+    }
+
     .action-buttons-container {
-        padding: 10px 15px;
+        padding: 12px 15px;
+        padding-bottom: calc(var(--safe-area-bottom) + 30px);
     }
 
     .action-button {
-        padding: 12px 10px;
-        font-size: 14px;
+        padding: 14px 12px;
+        font-size: 15px;
+        font-weight: 600;
     }
 }

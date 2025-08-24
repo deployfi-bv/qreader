@@ -26,6 +26,7 @@ class QRSafetyScanner {
         this.helpButton = document.getElementById('helpButton');
         this.helpModal = document.getElementById('helpModal');
         this.closeHelpBtn = document.getElementById('closeHelp');
+        this.buttonsContainer = document.querySelector('.action-buttons-container');
     }
 
     initEventListners() {
@@ -285,6 +286,10 @@ class QRSafetyScanner {
     showResult(url) {
         document.getElementById('urlDisplay').textContent = url;
         this.resultModal.classList.add('active');
+        // Show buttons container
+        if(this.buttonsContainer) {
+            this.buttonsContainer.style.transform = 'translateY(0)';
+        }
         this.loadingSpinner.classList.add('active');
 
         // Reset external check statuses
@@ -438,8 +443,8 @@ class QRSafetyScanner {
                 };
             }
 
-            // Simulate service-specific detections
-            if(serviceName === 'VirusTotal' && Math.random() > 0.7){
+            // Simulate service-specific detections - higher chance for demo
+            if(serviceName === 'VirusTotal' && Math.random() > 0.3){  // 70% chance of detection
                 threatDetails.push({
                     type: 'Community Reports',
                     description: '3 users flagged as suspicious',
@@ -465,8 +470,8 @@ class QRSafetyScanner {
             }
 
             return {
-                safe: !isSafe,
-                message: isSafe ? 'Clean' : 'Threats found',
+                safe: false,  // Always false when threats are found
+                message: 'Threats found',
                 details: threatDetails
             };
 
@@ -483,11 +488,12 @@ class QRSafetyScanner {
         const statusElement = document.getElementById(`${serviceId}Status`);
         const detailsElement = document.getElementById(`${serviceId}Details`);
 
-        if (status.safe === true) {
+        if (status.safe === true && (!status.details || status.details.length === 0)) {
             statusElement.innerHTML = '<span class="status-icon">✅</span> ' + status.message;
             statusElement.style.color = 'var(--success)';
-        } else if (status.safe === false) {
-            statusElement.innerHTML = '<span class="status-icon">⚠️</span> ' + status.message;
+        } else if (status.safe === false || (status.details && status.details.length > 0)) {
+            // Show red warning for any threats found
+            statusElement.innerHTML = '<span class="status-icon">❌</span> ' + status.message;
             statusElement.style.color = 'var(--danger)';
         } else {
             statusElement.innerHTML = '<span class="status-icon">❓</span> ' + status.message;
@@ -785,6 +791,10 @@ class QRSafetyScanner {
 
     closeResult() {
         this.resultModal.classList.remove('active');
+        // Hide buttons container
+        if(this.buttonsContainer) {
+            this.buttonsContainer.style.transform = 'translateY(100%)';
+        }
         this.lastScannedCode = null;
 
         // Restart scanning

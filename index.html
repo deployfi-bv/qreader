@@ -136,67 +136,69 @@
             </div>
         </div>
 
-        <div class="action-buttons-container">
-            <div class="action-buttons">
-                <button class="action-button secondary" id="copyButton">Copy Link</button>
-                <button class="action-button primary" id="openButton">Open Link</button>
-            </div>
-        </div>
     </div>
 
-    <div class="help-modal" id="helpModal">
-        <div class="help-content">
-            <div class="help-header">
-                <h2>User Guide</h2>
-                <button class="close-button" id="closeHelp">✕</button>
-            </div>
-
-            <div class="help-section">
-                <h3>📱 How to Use</h3>
-                <p>1. Tap "Start Scanning" to activate your camera</p>
-                <p>2. Point your camera at any QR code</p>
-                <p>3. The app will automatically detect and analyze the code</p>
-                <p>4. Review the safety analysis before opening any links</p>
-            </div>
-
-            <div class="help-section">
-                <h3>🛡️ Safety Indicators</h3>
-                <ul>
-                    <li><span class="status-badge safe">✅ Safe</span> - No threats detected</li>
-                    <li><span class="status-badge warning">⚠️ Warning</span> - Potential risks found</li>
-                    <li><span class="status-badge danger">⛔ Danger</span> - High risk detected</li>
-                </ul>
-            </div>
-
-            <div class="help-section">
-                <h3>🔍 AI Analysis Features</h3>
-                <ul>
-                    <li>Homoglyph detection (lookalike characters)</li>
-                    <li>Phishing domain detection</li>
-                    <li>SSL certificate verification</li>
-                    <li>URL shortener detection</li>
-                    <li>Typosquatting detection</li>
-                    <li>Multi-service security checks</li>
-                </ul>
-            </div>
-
-            <div class="help-section">
-                <h3>⚡ Quick Tips</h3>
-                <ul>
-                    <li>Always check the risk level before opening links</li>
-                    <li>Be extra cautious with shortened URLs</li>
-                    <li>Look for HTTPS protocol for secure connections</li>
-                    <li>Watch for suspicious characters in domains</li>
-                    <li>When in doubt, don't open the link</li>
-                </ul>
-            </div>
-
-            <div class="help-section">
-                <h3>🔒 Privacy</h3>
-                <p>This app processes all data locally on your device. No QR codes or URLs are sent to external servers for analysis.</p>
-            </div>
+    <div class="action-buttons-container" style="transform: translateY(100%);">
+        <div class="action-buttons">
+            <button class="action-button secondary" id="copyButton">Copy Link</button>
+            <button class="action-button primary" id="openButton">Open Link</button>
         </div>
     </div>
+</div>
+
+<div class="help-modal" id="helpModal">
+    <div class="help-content">
+        <div class="help-header">
+            <h2>User Guide</h2>
+            <button class="close-button" id="closeHelp">✕</button>
+        </div>
+
+        <div class="help-section">
+            <h3>📱 How to Use</h3>
+            <p>1. Tap "Start Scanning" to activate your camera</p>
+            <p>2. Point your camera at any QR code</p>
+            <p>3. The app will automatically detect and analyze the code</p>
+            <p>4. Review the safety analysis before opening any links</p>
+        </div>
+
+        <div class="help-section">
+            <h3>🛡️ Safety Indicators</h3>
+            <ul>
+                <li><span class="status-badge safe">✅ Safe</span> - No threats detected</li>
+                <li><span class="status-badge warning">⚠️ Warning</span> - Potential risks found</li>
+                <li><span class="status-badge danger">⛔ Danger</span> - High risk detected</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>🔍 AI Analysis Features</h3>
+            <ul>
+                <li>Homoglyph detection (lookalike characters)</li>
+                <li>Phishing domain detection</li>
+                <li>SSL certificate verification</li>
+                <li>URL shortener detection</li>
+                <li>Typosquatting detection</li>
+                <li>Multi-service security checks</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>⚡ Quick Tips</h3>
+            <ul>
+                <li>Always check the risk level before opening links</li>
+                <li>Be extra cautious with shortened URLs</li>
+                <li>Look for HTTPS protocol for secure connections</li>
+                <li>Watch for suspicious characters in domains</li>
+                <li>When in doubt, don't open the link</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>🔒 Privacy</h3>
+            <p>This app processes all data locally on your device. No QR codes or URLs are sent to external servers for analysis.</p>
+        </div>
+    </div>
+</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/gh/cozmo/jsQR/dist/jsQR.js"></script>
