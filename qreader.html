@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>QR Safety Scanner Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --safe-area-top: env(safe-area-inset-top);
+            --safe-area-bottom: env(safe-area-inset-bottom);
+            --primary: #007AFF;
+            --danger: #FF3B30;
+            --warning: #FF9500;
+            --success: #34C759;
+            --bg-dark: #000000;
+            --bg-secondary: #1C1C1E;
+            --text-primary: #FFFFFF;
+            --text-secondary: #8E8E93;
+            --purple: #AF52DE;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            padding-top: var(--safe-area-top);
+        }
+
+        .app-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .header {
+            padding: 20px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.7));
+            position: absolute;
+            top: var(--safe-area-top);
+            left: 0;
+            right: 0;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(135deg, var(--primary), #5AC8FA);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .scanner-container {
+            flex: 1;
+            position: relative;
+            background: var(--bg-dark);
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .scanner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .scanner-frame {
+            width: 250px;
+            height: 250px;
+            position: relative;
+        }
+
+        .scanner-frame::before,
+        .scanner-frame::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--primary);
+        }
+
+        .scanner-frame::before {
+            top: 0;
+            left: 0;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .scanner-frame::after {
+            top: 0;
+            right: 0;
+            border-left: none;
+            border-bottom: none;
+        }
+
+        .scanner-frame .corner-bl,
+        .scanner-frame .corner-br {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--primary);
+        }
+
+        .corner-bl {
+            bottom: 0;
+            left: 0;
+            border-right: none;
+            border-top: none;
+        }
+
+        .corner-br {
+            bottom: 0;
+            right: 0;
+            border-left: none;
+            border-top: none;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            animation: scan 2s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            50% { top: 100%; }
+            100% { top: 0; }
+        }
+
+        .start-button {
+            position: absolute;
+            bottom: calc(var(--safe-area-bottom) + 40px);
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 18px 50px;
+            background: linear-gradient(135deg, var(--primary), #5AC8FA);
+            border: none;
+            border-radius: 30px;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0, 122, 255, 0.3);
+            transition: all 0.3s;
+            z-index: 20;
+        }
+
+        .start-button:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+
+        .result-modal {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border-radius: 20px 20px 0 0;
+            padding: 20px;
+            padding-bottom: calc(var(--safe-area-bottom) + 20px);
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 30;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .result-modal.active {
+            transform: translateY(0);
+        }
+
+        .modal-handle {
+            width: 40px;
+            height: 4px;
+            background: var(--text-secondary);
+            border-radius: 2px;
+            margin: 0 auto 20px;
+        }
+
+        .safety-indicator {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .safety-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .safety-icon.safe {
+            background: rgba(52, 199, 89, 0.2);
+            color: var(--success);
+        }
+
+        .safety-icon.warning {
+            background: rgba(255, 149, 0, 0.2);
+            color: var(--warning);
+        }
+
+        .safety-icon.danger {
+            background: rgba(255, 59, 48, 0.2);
+            color: var(--danger);
+        }
+
+        .safety-text h3 {
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+
+        .safety-text p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .url-display {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            word-break: break-all;
+            font-family: 'SF Mono', monospace;
+            font-size: 14px;
+        }
+
+        .homoglyph-warning {
+            background: rgba(175, 82, 222, 0.1);
+            border: 1px solid var(--purple);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .homoglyph-warning.active {
+            display: block;
+        }
+
+        .homoglyph-warning h4 {
+            color: var(--purple);
+            font-size: 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .homoglyph-details {
+            font-family: 'SF Mono', monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .homoglyph-char {
+            background: rgba(175, 82, 222, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin: 0 2px;
+            color: var(--purple);
+        }
+
+        .external-checks {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .external-checks h4 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .check-item:last-child {
+            border-bottom: none;
+        }
+
+        .check-service {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .service-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .service-icon.virustotal {
+            background: #0084FF;
+            color: white;
+        }
+
+        .service-icon.google {
+            background: #4285F4;
+            color: white;
+        }
+
+        .service-icon.phishtank {
+            background: #FF6B6B;
+            color: white;
+        }
+
+        .service-icon.urlvoid {
+            background: #6C63FF;
+            color: white;
+        }
+
+        .check-status {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+        }
+
+        .status-loading {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .status-icon {
+            font-size: 16px;
+        }
+
+        .analysis-details {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .analysis-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .analysis-item:last-child {
+            border-bottom: none;
+        }
+
+        .analysis-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .analysis-value {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .action-button {
+            flex: 1;
+            padding: 15px;
+            border-radius: 12px;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .action-button.primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .action-button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        .action-button.danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .close-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: var(--text-primary);
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .loading-spinner {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .loading-spinner.active {
+            display: block;
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .permission-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-dark);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            text-align: center;
+            z-index: 40;
+        }
+
+        .permission-icon {
+            font-size: 80px;
+            margin-bottom: 30px;
+        }
+
+        .permission-title {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .permission-text {
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        .external-link-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            color: var(--primary);
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>QR Safety Scanner Pro</h1>
+        </div>
+
+        <div class="scanner-container">
+            <video id="video" playsinline></video>
+            <canvas id="canvas"></canvas>
+            
+            <div class="scanner-overlay">
+                <div class="scanner-frame">
+                    <div class="corner-bl"></div>
+                    <div class="corner-br"></div>
+                    <div class="scan-line"></div>
+                </div>
+            </div>
+
+            <div class="loading-spinner"></div>
+            
+            <button class="start-button" id="startButton">Начать сканирование</button>
+
+            <div class="permission-screen" id="permissionScreen" style="display: none;">
+                <div class="permission-icon">📷</div>
+                <div class="permission-title">Доступ к камере</div>
+                <div class="permission-text">
+                    Для сканирования QR-кодов приложению необходим доступ к камере вашего устройства
+                </div>
+                <button class="start-button" id="grantPermission">Разрешить доступ</button>
+            </div>
+        </div>
+
+        <div class="result-modal" id="resultModal">
+            <button class="close-button" id="closeModal">✕</button>
+            <div class="modal-handle"></div>
+            
+            <div class="safety-indicator" id="safetyIndicator">
+                <div class="safety-icon" id="safetyIcon">
+                    <span id="safetyEmoji">🔍</span>
+                </div>
+                <div class="safety-text">
+                    <h3 id="safetyTitle">Анализ безопасности</h3>
+                    <p id="safetyDescription">Проверка ссылки...</p>
+                </div>
+            </div>
+
+            <div class="url-display" id="urlDisplay"></div>
+
+            <div class="homoglyph-warning" id="homoglyphWarning">
+                <h4>⚠️ Обнаружены подозрительные символы</h4>
+                <div class="homoglyph-details" id="homoglyphDetails"></div>
+            </div>
+
+            <div class="external-checks" id="externalChecks">
+                <h4>Внешние проверки безопасности</h4>
+                <div class="check-item">
+                    <div class="check-service">
+                        <div class="service-icon virustotal">VT</div>
+                        <span>VirusTotal</span>
+                    </div>
+                    <div class="check-status" id="virustotalStatus">
+                        <div class="status-loading"></div>
+                    </div>
+                </div>
+                <div class="check-item">
+                    <div class="check-service">
+                        <div class="service-icon google">G</div>
+                        <span>Google Safe Browsing</span>
+                    </div>
+                    <div class="check-status" id="googleStatus">
+                        <div class="status-loading"></div>
+                    </div>
+                </div>
+                <div class="check-item">
+                    <div class="check-service">
+                        <div class="service-icon phishtank">PT</div>
+                        <span>PhishTank</span>
+                    </div>
+                    <div class="check-status" id="phishtankStatus">
+                        <div class="status-loading"></div>
+                    </div>
+                </div>
+                <div class="check-item">
+                    <div class="check-service">
+                        <div class="service-icon urlvoid">UV</div>
+                        <span>URLVoid</span>
+                    </div>
+                    <div class="check-status" id="urlvoidStatus">
+                        <div class="status-loading"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="analysis-details">
+                <div class="analysis-item">
+                    <span class="analysis-label">Протокол</span>
+                    <span class="analysis-value" id="protocolValue">-</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Домен</span>
+                    <span class="analysis-value" id="domainValue">-</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Сертификат SSL</span>
+                    <span class="analysis-value" id="sslValue">-</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Тип ссылки</span>
+                    <span class="analysis-value" id="linkTypeValue">-</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Омоглифы</span>
+                    <span class="analysis-value" id="homoglyphValue">-</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Уровень риска</span>
+                    <span class="analysis-value" id="riskValue">-</span>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="action-button secondary" id="copyButton">Копировать</button>
+                <button class="action-button primary" id="openButton">Открыть ссылку</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/gh/cozmo/jsQR/dist/jsQR.js"></script>
+    <script>
+        class QRSafetyScanner {
+            constructor() {
+                this.video = document.getElementById('video');
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.scanning = false;
+                this.stream = null;
+                this.lastScannedCode = null;
+                this.initElements();
+                this.initEventListeners();
+                this.initHomoglyphMap();
+            }
+
+            initElements() {
+                this.startButton = document.getElementById('startButton');
+                this.resultModal = document.getElementById('resultModal');
+                this.closeModalBtn = document.getElementById('closeModal');
+                this.permissionScreen = document.getElementById('permissionScreen');
+                this.grantPermissionBtn = document.getElementById('grantPermission');
+                this.loadingSpinner = document.querySelector('.loading-spinner');
+                this.copyButton = document.getElementById('copyButton');
+                this.openButton = document.getElementById('openButton');
+                this.homoglyphWarning = document.getElementById('homoglyphWarning');
+                this.externalChecks = document.getElementById('externalChecks');
+            }
+
+            initEventListeners() {
+                this.startButton.addEventListener('click', () => this.startScanning());
+                this.closeModalBtn.addEventListener('click', () => this.closeResult());
+                this.grantPermissionBtn.addEventListener('click', () => this.requestCameraPermission());
+                this.copyButton.addEventListener('click', () => this.copyToClipboard());
+                this.openButton.addEventListener('click', () => this.openLink());
+            }
+
+            initHomoglyphMap() {
+                // Расширенная карта омоглифов (похожих символов из разных алфавитов)
+                this.homoglyphs = {
+                    // Латиница -> Кириллица
+                    'a': ['а', 'ɑ', 'α', 'ａ'], // русская а, греческая альфа
+                    'b': ['Ь', 'ḃ', 'ｂ'],
+                    'c': ['с', 'ϲ', 'ⅽ', 'ｃ'], // русская с
+                    'd': ['ԁ', 'ⅾ', 'ｄ'],
+                    'e': ['е', 'ё', 'ε', 'ｅ'], // русская е
+                    'f': ['ḟ', 'ｆ'],
+                    'g': ['ġ', 'ɡ', 'ｇ'],
+                    'h': ['һ', 'ｈ'], // кириллица
+                    'i': ['і', 'ı', 'ⅰ', 'ｉ'], // украинская i
+                    'j': ['ј', 'ⅼ', 'ｊ'], // кириллица
+                    'k': ['к', 'ｋ'], // русская к
+                    'l': ['ӏ', '1', 'ⅼ', 'ｌ', '|'], // цифра 1
+                    'm': ['м', 'ⅿ', 'ｍ'], // русская м
+                    'n': ['п', 'ｎ'], // может быть спутано
+                    'o': ['о', '0', 'ο', 'ｏ', 'ø', 'ф'], // русская о, ноль, греческая о, фи
+                    'p': ['р', 'ρ', 'ｐ'], // русская р, греческая ро
+                    'q': ['ԛ', 'ｑ'],
+                    'r': ['г', 'ｒ'], // русская г
+                    's': ['ѕ', 'ｓ'], // кириллица
+                    't': ['т', 'ｔ'], // русская т
+                    'u': ['ս', 'ｕ', 'ц'], // армянская, русская ц
+                    'v': ['ν', 'ⅴ', 'ｖ'], // греческая ню
+                    'w': ['ԝ', 'ⅿ', 'ｗ', 'ш'], // русская ш
+                    'x': ['х', 'ⅹ', 'ｘ'], // русская х
+                    'y': ['у', 'ｙ'], // русская у
+                    'z': ['ｚ', 'ζ'],
+                    // Заглавные буквы
+                    'A': ['А', 'Α', 'Ａ'], // русская А, греческая Альфа
+                    'B': ['В', 'Β', 'Ｂ'], // русская В, греческая Бета
+                    'C': ['С', 'Ϲ', 'Ｃ'], // русская С
+                    'E': ['Е', 'Ε', 'Ｅ'], // русская Е, греческая Эпсилон
+                    'H': ['Н', 'Η', 'Ｈ'], // русская Н, греческая Эта
+                    'I': ['І', 'Ι', 'Ｉ', '|'], // украинская I, греческая Йота
+                    'K': ['К', 'Κ', 'Ｋ'], // русская К, греческая Каппа
+                    'M': ['М', 'Μ', 'Ｍ'], // русская М, греческая Мю
+                    'N': ['Ν', 'Ｎ'], // греческая Ню
+                    'O': ['О', '0', 'Ο', 'Ｏ', 'Ф'], // русская О, ноль, греческая О, Фи
+                    'P': ['Р', 'Ρ', 'Ｐ'], // русская Р, греческая Ро
+                    'S': ['Ѕ', 'Ｓ'], // кириллица
+                    'T': ['Т', 'Τ', 'Ｔ'], // русская Т, греческая Тау
+                    'X': ['Х', 'Χ', 'Ｘ'], // русская Х, греческая Хи
+                    'Y': ['У', 'Υ', 'Ｙ'], // русская У, греческая Ипсилон
+                    'Z': ['Ζ', 'Ｚ'],
+                    // Цифры
+                    '0': ['О', 'о', 'O', 'o', 'Ο', 'ο', 'Ｏ', 'ｏ'],
+                    '1': ['l', 'I', 'ӏ', '|', 'ｌ', 'Ｉ'],
+                    '6': ['б'],
+                    '9': ['g']
+                };
+
+                // Создаем обратную карту для быстрого поиска
+                this.reverseHomoglyphs = {};
+                for (const [original, variants] of Object.entries(this.homoglyphs)) {
+                    for (const variant of variants) {
+                        if (!this.reverseHomoglyphs[variant]) {
+                            this.reverseHomoglyphs[variant] = [];
+                        }
+                        this.reverseHomoglyphs[variant].push(original);
+                    }
+                }
+            }
+
+            detectHomoglyphs(text) {
+                const suspicious = [];
+                const chars = [...text]; // Разбиваем на символы с учетом Unicode
+                
+                for (let i = 0; i < chars.length; i++) {
+                    const char = chars[i];
+                    
+                    // Проверяем, является ли символ омоглифом
+                    if (this.reverseHomoglyphs[char]) {
+                        suspicious.push({
+                            position: i,
+                            char: char,
+                            original: this.reverseHomoglyphs[char],
+                            unicode: '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')
+                        });
+                    }
+                    
+                    // Проверяем на смешение алфавитов
+                    const charCode = char.charCodeAt(0);
+                    const isCyrillic = (charCode >= 0x0400 && charCode <= 0x04FF);
+                    const isGreek = (charCode >= 0x0370 && charCode <= 0x03FF);
+                    const isFullwidth = (charCode >= 0xFF00 && charCode <= 0xFFEF);
+                    
+                    if (isCyrillic || isGreek || isFullwidth) {
+                        if (!suspicious.find(s => s.position === i)) {
+                            suspicious.push({
+                                position: i,
+                                char: char,
+                                type: isCyrillic ? 'Кириллица' : isGreek ? 'Греческий' : 'Fullwidth',
+                                unicode: '\\u' + charCode.toString(16).padStart(4, '0')
+                            });
+                        }
+                    }
+                }
+                
+                return suspicious;
+            }
+
+            async requestCameraPermission() {
+                this.permissionScreen.style.display = 'none';
+                await this.initCamera();
+            }
+
+            async startScanning() {
+                this.startButton.style.display = 'none';
+                await this.initCamera();
+            }
+
+            async initCamera() {
+                try {
+                    const constraints = {
+                        video: {
+                            facingMode: 'environment',
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
+                    };
+
+                    this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    this.video.srcObject = this.stream;
+                    this.video.play();
+                    
+                    this.video.addEventListener('loadedmetadata', () => {
+                        this.canvas.width = this.video.videoWidth;
+                        this.canvas.height = this.video.videoHeight;
+                        this.scanning = true;
+                        this.scanQRCode();
+                    });
+                } catch (error) {
+                    console.error('Camera access error:', error);
+                    this.handleCameraError(error);
+                }
+            }
+
+            handleCameraError(error) {
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    this.permissionScreen.style.display = 'flex';
+                    this.startButton.style.display = 'block';
+                } else {
+                    alert('Не удалось получить доступ к камере. Проверьте настройки браузера.');
+                    this.startButton.style.display = 'block';
+                }
+            }
+
+            scanQRCode() {
+                if (!this.scanning) return;
+
+                if (this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
+                    this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                    if (code && code.data !== this.lastScannedCode) {
+                        this.lastScannedCode = code.data;
+                        this.handleQRCode(code.data);
+                        this.vibrateDevice();
+                    }
+                }
+
+                requestAnimationFrame(() => this.scanQRCode());
+            }
+
+            vibrateDevice() {
+                if ('vibrate' in navigator) {
+                    navigator.vibrate(200);
+                }
+            }
+
+            handleQRCode(data) {
+                this.scanning = false;
+                this.showResult(data);
+                this.analyzeURL(data);
+                this.checkExternalServices(data);
+            }
+
+            showResult(url) {
+                document.getElementById('urlDisplay').textContent = url;
+                this.resultModal.classList.add('active');
+                this.loadingSpinner.classList.add('active');
+                
+                // Сброс статусов внешних проверок
+                ['virustotal', 'google', 'phishtank', 'urlvoid'].forEach(service => {
+                    document.getElementById(`${service}Status`).innerHTML = '<div class="status-loading"></div>';
+                });
+            }
+
+            async checkExternalServices(url) {
+                // Симуляция проверки внешних сервисов
+                // В реальном приложении здесь были бы API запросы
+                
+                const services = [
+                    { id: 'virustotal', name: 'VirusTotal', delay: 1500 },
+                    { id: 'google', name: 'Google Safe Browsing', delay: 1200 },
+                    { id: 'phishtank', name: 'PhishTank', delay: 1800 },
+                    { id: 'urlvoid', name: 'URLVoid', delay: 2000 }
+                ];
+
+                for (const service of services) {
+                    setTimeout(() => {
+                        const status = this.simulateServiceCheck(url, service.name);
+                        this.updateServiceStatus(service.id, status);
+                    }, service.delay);
+                }
+            }
+
+            simulateServiceCheck(url, serviceName) {
+                // Симуляция результатов проверки
+                try {
+                    const urlObj = new URL(url);
+                    const domain = urlObj.hostname.toLowerCase();
+                    
+                    // Известные безопасные домены
+                    const safeDomains = ['google.com', 'apple.com', 'microsoft.com', 'github.com'];
+                    if (safeDomains.some(safe => domain.includes(safe))) {
+                        return { safe: true, message: 'Безопасно' };
+                    }
+                    
+                    // Подозрительные признаки
+                    if (domain.includes('phishing') || domain.includes('malware')) {
+                        return { safe: false, message: 'Угроза!' };
+                    }
+                    
+                    // Сокращатели ссылок
+                    const shorteners = ['bit.ly', 'tinyurl.com', 'goo.gl'];
+                    if (shorteners.some(short => domain.includes(short))) {
+                        return { safe: null, message: 'Неизвестно' };
+                    }
+                    
+                    // Случайный результат для демонстрации
+                    const random = Math.random();
+                    if (random > 0.8) {
+                        return { safe: false, message: 'Подозрительно' };
+                    } else if (random > 0.6) {
+                        return { safe: null, message: 'Не проверено' };
+                    }
+                    
+                    return { safe: true, message: 'Чисто' };
+                } catch (e) {
+                    return { safe: null, message: 'Н/Д' };
+                }
+            }
+
+            updateServiceStatus(serviceId, status) {
+                const statusElement = document.getElementById(`${serviceId}Status`);
+                
+                if (status.safe === true) {
+                    statusElement.innerHTML = '<span class="status-icon">✅</span> ' + status.message;
+                    statusElement.style.color = 'var(--success)';
+                } else if (status.safe === false) {
+                    statusElement.innerHTML = '<span class="status-icon">⚠️</span> ' + status.message;
+                    statusElement.style.color = 'var(--danger)';
+                } else {
+                    statusElement.innerHTML = '<span class="status-icon">❓</span> ' + status.message;
+                    statusElement.style.color = 'var(--text-secondary)';
+                }
+            }
+
+            analyzeURL(url) {
+                // AI-анализ безопасности URL с проверкой омоглифов
+                setTimeout(() => {
+                    const analysis = this.performSafetyAnalysis(url);
+                    this.displayAnalysis(analysis);
+                    this.loadingSpinner.classList.remove('active');
+                }, 2000);
+            }
+
+            performSafetyAnalysis(url) {
+                const analysis = {
+                    url: url,
+                    isSafe: true,
+                    riskLevel: 'low',
+                    warnings: [],
+                    details: {},
+                    homoglyphs: []
+                };
+
+                try {
+                    const urlObj = new URL(url);
+                    
+                    // Проверка протокола
+                    analysis.details.protocol = urlObj.protocol;
+                    if (urlObj.protocol !== 'https:') {
+                        analysis.warnings.push('Незащищенное соединение (HTTP)');
+                        analysis.riskLevel = 'medium';
+                        analysis.isSafe = false;
+                    }
+
+                    // Проверка домена
+                    analysis.details.domain = urlObj.hostname;
+                    
+                    // Проверка на омоглифы
+                    const homoglyphs = this.detectHomoglyphs(urlObj.hostname);
+                    if (homoglyphs.length > 0) {
+                        analysis.homoglyphs = homoglyphs;
+                        analysis.warnings.push('Обнаружены подозрительные символы');
+                        analysis.riskLevel = 'high';
+                        analysis.isSafe = false;
+                    }
+                    
+                    // Проверка на фишинговые признаки
+                    const suspiciousDomains = ['bit.ly', 'tinyurl.com', 'goo.gl', 'ow.ly', 'short.link'];
+                    
+                    if (suspiciousDomains.some(domain => urlObj.hostname.includes(domain))) {
+                        analysis.warnings.push('Сокращенная ссылка');
+                        analysis.details.linkType = 'Сокращенная';
+                        analysis.riskLevel = analysis.riskLevel === 'high' ? 'high' : 'medium';
+                    } else {
+                        analysis.details.linkType = 'Прямая';
+                    }
+
+                    // Проверка на подозрительные паттерны
+                    const suspiciousPatterns = [
+                        /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/, // IP адреса
+                        /@/, // @ символ в URL
+                    ];
+
+                    for (const pattern of suspiciousPatterns) {
+                        if (pattern.test(urlObj.hostname)) {
+                            analysis.warnings.push('Подозрительный формат домена');
+                            analysis.riskLevel = 'high';
+                            analysis.isSafe = false;
+                            break;
+                        }
+                    }
+
+                    // Проверка на похожие домены (typosquatting)
+                    const trustedDomains = ['google.com', 'facebook.com', 'apple.com', 'microsoft.com', 'amazon.com', 'paypal.com', 'ebay.com', 'twitter.com'];
+                    const hostname = urlObj.hostname.toLowerCase();
+                    
+                    // Сначала удаляем омоглифы для проверки
+                    let cleanHostname = hostname;
+                    for (const char of hostname) {
+                        if (this.reverseHomoglyphs[char]) {
+                            cleanHostname = cleanHostname.replace(char, this.reverseHomoglyphs[char][0]);
+                        }
+                    }
+                    
+                    for (const trusted of trustedDomains) {
+                        const similarity = this.calculateSimilarity(cleanHostname, trusted);
+                        if (similarity > 0.7 && similarity < 1) {
+                            analysis.warnings.push(`Похож на ${trusted}`);
+                            analysis.riskLevel = 'high';
+                            analysis.isSafe = false;
+                            break;
+                        }
+                    }
+
+                    // Установка финального уровня риска
+                    if (analysis.warnings.length === 0) {
+                        analysis.riskLevel = 'low';
+                        analysis.isSafe = true;
+                    } else if (analysis.warnings.length === 1 && analysis.riskLevel !== 'high') {
+                        analysis.riskLevel = 'medium';
+                    } else {
+                        analysis.riskLevel = 'high';
+                        analysis.isSafe = false;
+                    }
+
+                } catch (e) {
+                    // Не является валидным URL
+                    analysis.isSafe = true;
+                    analysis.riskLevel = 'low';
+                    analysis.details.type = 'text';
+                }
+
+                return analysis;
+            }
+
+            calculateSimilarity(str1, str2) {
+                const longer = str1.length > str2.length ? str1 : str2;
+                const shorter = str1.length > str2.length ? str2 : str1;
+                
+                if (longer.length === 0) return 1.0;
+                
+                const editDistance = this.levenshteinDistance(longer, shorter);
+                return (longer.length - editDistance) / longer.length;
+            }
+
+            levenshteinDistance(str1, str2) {
+                const matrix = [];
+                
+                for (let i = 0; i <= str2.length; i++) {
+                    matrix[i] = [i];
+                }
+                
+                for (let j = 0; j <= str1.length; j++) {
+                    matrix[0][j] = j;
+                }
+                
+                for (let i = 1; i <= str2.length; i++) {
+                    for (let j = 1; j <= str1.length; j++) {
+                        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                            matrix[i][j] = matrix[i - 1][j - 1];
+                        } else {
+                            matrix[i][j] = Math.min(
+                                matrix[i - 1][j - 1] + 1,
+                                matrix[i][j - 1] + 1,
+                                matrix[i - 1][j] + 1
+                            );
+                        }
+                    }
+                }
+                
+                return matrix[str2.length][str1.length];
+            }
+
+            displayAnalysis(analysis) {
+                const safetyIcon = document.getElementById('safetyIcon');
+                const safetyEmoji = document.getElementById('safetyEmoji');
+                const safetyTitle = document.getElementById('safetyTitle');
+                const safetyDescription = document.getElementById('safetyDescription');
+                
+                // Обновление индикатора безопасности
+                if (analysis.riskLevel === 'low') {
+                    safetyIcon.className = 'safety-icon safe';
+                    safetyEmoji.textContent = '✅';
+                    safetyTitle.textContent = 'Безопасная ссылка';
+                    safetyDescription.textContent = 'Не обнаружено признаков угрозы';
+                    this.openButton.className = 'action-button primary';
+                    this.openButton.textContent = 'Открыть ссылку';
+                } else if (analysis.riskLevel === 'medium') {
+                    safetyIcon.className = 'safety-icon warning';
+                    safetyEmoji.textContent = '⚠️';
+                    safetyTitle.textContent = 'Требуется внимание';
+                    safetyDescription.textContent = analysis.warnings.join(', ');
+                    this.openButton.className = 'action-button primary';
+                    this.openButton.textContent = 'Открыть с осторожностью';
+                } else {
+                    safetyIcon.className = 'safety-icon danger';
+                    safetyEmoji.textContent = '⛔';
+                    safetyTitle.textContent = 'Потенциальная угроза';
+                    safetyDescription.textContent = analysis.warnings.join(', ');
+                    this.openButton.className = 'action-button danger';
+                    this.openButton.textContent = 'Открыть (не рекомендуется)';
+                }
+
+                // Отображение предупреждения об омоглифах
+                if (analysis.homoglyphs && analysis.homoglyphs.length > 0) {
+                    this.homoglyphWarning.classList.add('active');
+                    const details = document.getElementById('homoglyphDetails');
+                    
+                    let detailsHTML = 'Найдены символы: ';
+                    for (const h of analysis.homoglyphs) {
+                        detailsHTML += `<span class="homoglyph-char">"${h.char}" (${h.type || h.unicode})</span> `;
+                        if (h.original) {
+                            detailsHTML += `вместо "${h.original.join('" или "')}" `;
+                        }
+                    }
+                    details.innerHTML = detailsHTML;
+                } else {
+                    this.homoglyphWarning.classList.remove('active');
+                }
+
+                // Обновление деталей анализа
+                document.getElementById('protocolValue').textContent = 
+                    analysis.details.protocol === 'https:' ? 'HTTPS ✅' : 
+                    analysis.details.protocol === 'http:' ? 'HTTP ⚠️' : 
+                    'Текст';
+                    
+                document.getElementById('domainValue').textContent = 
+                    analysis.details.domain || 'Не URL';
+                    
+                document.getElementById('sslValue').textContent = 
+                    analysis.details.protocol === 'https:' ? 'Есть ✅' : 
+                    analysis.details.protocol === 'http:' ? 'Нет ⚠️' : 
+                    'Н/Д';
+                    
+                document.getElementById('linkTypeValue').textContent = 
+                    analysis.details.linkType || 'Обычный текст';
+                    
+                document.getElementById('homoglyphValue').textContent = 
+                    analysis.homoglyphs.length > 0 ? `${analysis.homoglyphs.length} найдено ⚠️` : 'Не обнаружено ✅';
+                    
+                document.getElementById('riskValue').textContent = 
+                    analysis.riskLevel === 'low' ? 'Низкий ✅' :
+                    analysis.riskLevel === 'medium' ? 'Средний ⚠️' :
+                    'Высокий ⛔';
+
+                // Сохранение данных для кнопок
+                this.currentAnalysis = analysis;
+            }
+
+            closeResult() {
+                this.resultModal.classList.remove('active');
+                this.lastScannedCode = null;
+
+                this.scanning = true;
+                this.scanQRCode();
+            }
+
+            copyToClipboard() {
+                const url = document.getElementById('urlDisplay').textContent;
+                navigator.clipboard.writeText(url).then(() => {
+                    this.copyButton.textContent = 'Скопировано ✓';
+                    setTimeout(() => {
+                        this.copyButton.textContent = 'Копировать';
+                    }, 2000);
+                });
+            }
+
+            openLink() {
+                const url = document.getElementById('urlDisplay').textContent;
+                if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'high') {
+                    if (confirm('⚠️ ВНИМАНИЕ! Эта ссылка содержит множественные признаки угрозы:\n\n' + 
+                               this.currentAnalysis.warnings.join('\n') + 
+                               '\n\nВы действительно хотите продолжить?')) {
+                        window.open(url, '_blank');
+                    }
+                } else if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'medium') {
+                    if (confirm('⚠️ Обнаружены подозрительные признаки:\n\n' + 
+                               this.currentAnalysis.warnings.join('\n') + 
+                               '\n\nПродолжить?')) {
+                        window.open(url, '_blank');
+                    }
+                } else {
+                    window.open(url, '_blank');
+                }
+            }
+
+            stopScanning() {
+                this.scanning = false;
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                    this.stream = null;
+                }
+            }
+        }
+
+        // Инициализация приложения
+        document.addEventListener('DOMContentLoaded', () => {
+            const scanner = new QRSafetyScanner();
+            
+            // Обработка закрытия приложения
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && scanner.scanning) {
+                    scanner.stopScanning();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
