@@ -6,6 +6,8 @@ class QRSafetyScanner {
         this.scanning = false;
         this.stream = null;
         this.lastScannedCode = null;
+        this.hasAI = false;  // Track AI availability
+        this.aiSession = null;  // Store AI session
         this.initilizeElements();  // typo: initilize
         this.initEventListners(); // typo: Listners
         this.initHomoglyphMap();
@@ -113,9 +115,221 @@ class QRSafetyScanner {
         }
     }
 
+    async checkBrowserAI() {
+        // Check for browser AI capabilities
+        this.hasAI = false;
+        this.aiSession = null;
+
+        try {
+            // Check for Chrome's Window AI API (experimental)
+            // To enable: chrome://flags/#optimization-guide-on-device-model
+            // Enable "Enables optimization guide on device" flag
+            if (typeof window.ai !== 'undefined' && window.ai) {
+                console.log('🤖 Browser AI API detected!');
+                try {
+                    // Try to create an AI session
+                    this.aiSession = await window.ai.createTextSession();
+                    this.hasAI = true;
+                    console.log('✅ AI session created successfully');
+                    this.showAIStatus(true);
+                    return true;
+                } catch (e) {
+                    console.log('⚠️ AI API exists but session creation failed:', e);
+                    console.log('To enable Chrome AI:');
+                    console.log('1. Go to chrome://flags/#optimization-guide-on-device-model');
+                    console.log('2. Enable "Optimization guide on device model"');
+                    console.log('3. Restart Chrome');
+                }
+            }
+
+            // Check for Gemini Nano availability
+            if (typeof window.ai !== 'undefined' && window.ai?.canCreateTextSession) {
+                const canUse = await window.ai.canCreateTextSession();
+                console.log('Gemini Nano availability:', canUse);
+                if (canUse === 'readily') {
+                    try {
+                        this.aiSession = await window.ai.createTextSession();
+                        this.hasAI = true;
+                        console.log('✅ Gemini Nano session created');
+                        this.showAIStatus(true);
+                        return true;
+                    } catch (e) {
+                        console.log('Gemini Nano session failed:', e);
+                    }
+                }
+            }
+
+            // Check for other browser AI APIs
+            if (typeof window.ml !== 'undefined' && window.ml) {
+                console.log('ML API detected');
+                this.hasML = true;
+            }
+
+            // Check for WebGPU (can be used for local AI models)
+            if ('gpu' in navigator) {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (adapter) {
+                    console.log('WebGPU available for AI acceleration');
+                    this.hasWebGPU = true;
+                }
+            }
+        } catch (error) {
+            console.log('No browser AI available, using pattern matching:', error);
+        }
+
+        this.showAIStatus(false);
+        return false;
+    }
+
+    showAIStatus(active) {
+        const aiStatus = document.getElementById('aiStatus');
+        if (aiStatus) {
+            aiStatus.style.display = 'flex';
+            if (active) {
+                aiStatus.classList.remove('inactive');
+                aiStatus.title = 'Browser AI Active - Using local LLM for analysis';
+            } else {
+                aiStatus.classList.add('inactive');
+                aiStatus.title = 'Browser AI not available - Using pattern matching';
+            }
+        }
+    }
+
+    async analyzeWithAI(url) {
+        if (!this.hasAI || !this.aiSession) {
+            return null;
+        }
+
+        try {
+            const prompt = `You are a security expert analyzing URLs for threats. Analyze this URL: "${url}"
+
+            Check for these specific threats:
+            - Phishing attempts (fake versions of legitimate sites)
+            - Typosquatting (misspellings of popular domains)
+            - Suspicious URL patterns (IP addresses, @ symbols, multiple subdomains)
+            - Known malware distribution patterns
+            - URL shorteners hiding destinations
+            - Homoglyph attacks (lookalike characters from other alphabets)
+
+            Important: Respond ONLY with valid JSON in this exact format, no other text:
+            {
+                "riskLevel": "low|medium|high",
+                "threats": ["specific threat 1", "specific threat 2"],
+                "aiConfidence": 85,
+                "explanation": "One sentence explanation"
+            }`;
+
+            console.log('Sending to AI:', prompt);
+            const response = await this.aiSession.prompt(prompt);
+            console.log('AI Response:', response);
+
+            try {
+                // Clean response and parse JSON
+                let cleanResponse = response.trim();
+                // Remove markdown code blocks if present
+                cleanResponse = cleanResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+
+                const aiAnalysis = JSON.parse(cleanResponse);
+                console.log('✅ Parsed AI Analysis:', aiAnalysis);
+                return aiAnalysis;
+            } catch (parseError) {
+                console.log('Failed to parse AI response as JSON:', parseError);
+                // Try to extract insights from text
+                return this.parseAITextResponse(response);
+            }
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            return null;
+        }
+    }
+
+    parseAITextResponse(text) {
+        // Extract insights from non-JSON AI response
+        const analysis = {
+            riskLevel: 'medium',
+            threats: [],
+            aiConfidence: 70,
+            explanation: text.substring(0, 200)
+        };
+
+        // Look for risk indicators in text
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes('high risk') || lowerText.includes('dangerous') || lowerText.includes('malicious')) {
+            analysis.riskLevel = 'high';
+            analysis.aiConfidence = 90;
+        } else if (lowerText.includes('safe') || lowerText.includes('legitimate') || lowerText.includes('no threat')) {
+            analysis.riskLevel = 'low';
+            analysis.aiConfidence = 85;
+        }
+
+        // Extract specific threats mentioned
+        const threatKeywords = ['phishing', 'malware', 'scam', 'fake', 'suspicious', 'typosquatting'];
+        threatKeywords.forEach(threat => {
+            if (lowerText.includes(threat)) {
+                analysis.threats.push(threat.charAt(0).toUpperCase() + threat.slice(1) + ' detected');
+            }
+        });
+
+        return analysis;
+    }
+
     initAIPatterens() {
-        // Enhanced AI patterns for better threat detection
+        // First check for browser AI
+        this.checkBrowserAI().then(hasAI => {
+            if (hasAI) {
+                console.log('🤖 Using real browser AI for analysis');
+            } else {
+                console.log('📊 Using pattern-based analysis');
+                console.log('💡 To enable Chrome AI:');
+                console.log('   1. Use Chrome Canary or Dev channel');
+                console.log('   2. Go to chrome://flags/#optimization-guide-on-device-model');
+                console.log('   3. Enable the flag and restart Chrome');
+            }
+        });
+
+        // Enhanced AI patterns for better threat detection (fallback)
         this.threatPatterns = {
+            phishing: {
+                keywords: ['verify', 'suspend', 'confirm', 'update', 'expired', 'locked', 'secure', 'bank', 'paypal', 'amazon', 'apple', 'microsoft', 'google', 'account', 'urgent', 'immediately'],
+                patterns: [
+                    /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/, // IP addresses
+                    /@/, // @ symbol in URL
+                    /[0-9]{4,}/, // Long numbers in domain
+                    /-{2,}/, // Multiple hyphens
+                    /xn--/, // Punycode domains
+                ],
+                suspiciousTLDs: ['.tk', '.ml', '.ga', '.cf', '.click', '.download', '.review', '.top', '.work']
+            },
+            malware: {
+                keywords: ['download', 'install', 'update', 'flash', 'player', 'java', 'plugin', 'free', 'crack', 'keygen'],
+                extensions: ['.exe', '.zip', '.rar', '.bat', '.cmd', '.scr', '.vbs', '.jar', '.apk', '.msi']
+            },
+            shorteners: {
+                domains: ['bit.ly', 'tinyurl.com', 'goo.gl', 'ow.ly', 'short.link', 't.co', 'buff.ly', 'is.gd', 'tr.im', 'rebrand.ly']
+            },
+            trustedDomains: [
+                'google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com',
+                'linkedin.com', 'github.com', 'stackoverflow.com', 'wikipedia.org', 'amazon.com',
+                'apple.com', 'microsoft.com', 'netflix.com', 'spotify.com', 'reddit.com'
+            ]
+        };
+
+        // threat database simulation
+        this.threatDatabase = {
+            knownPhishing: [
+                'secure-bank-update.com',
+                'paypal-verification.net',
+                'amazon-security.org',
+                'apple-id-locked.com',
+                'microsoft-account-verify.net'
+            ],
+            knownMalware: [
+                'malware-download.com',
+                'free-software-crack.net',
+                'virus-infected.org'
+            ]
+        };
+    }
             phishing: {
                 keywords: ['verify', 'suspend', 'confirm', 'update', 'expired', 'locked', 'secure', 'bank', 'paypal', 'amazon', 'apple', 'microsoft', 'google','account','urgent','immediately'],
                 patterns: [
@@ -517,13 +731,62 @@ class QRSafetyScanner {
         }
     }
 
-    analizeURL(url) {  // typo in method name
-        // Enhanced AI analysis with comprehensive threat detection
+    async analizeURL(url) {  // typo in method name
+        // Try real AI first if available
+        if (this.hasAI) {
+            console.log('🤖 Using browser AI for analysis...');
+            const aiResult = await this.analyzeWithAI(url);
+
+            if (aiResult) {
+                // Use real AI results
+                setTimeout(() => {
+                    const analysis = this.mergeAIWithPatternAnalysis(url, aiResult);
+                    this.displayAnalysis(analysis);
+                    this.loadingSpinner.classList.remove('active');
+                }, 1500);
+                return;
+            }
+        }
+
+        // Fallback to pattern-based analysis
+        console.log('📊 Using pattern-based analysis...');
         setTimeout(() => {
             const analysis = this.performAdvancedAIAnalisys(url);  // typo: Analisys
             this.displayAnalysis(analysis);
             this.loadingSpinner.classList.remove('active');
         }, 2500);
+    }
+
+    mergeAIWithPatternAnalysis(url, aiResult) {
+        // Start with pattern analysis for structure
+        const analysis = this.performAdvancedAIAnalisys(url);
+
+        // Override with AI insights
+        if (aiResult.riskLevel) {
+            analysis.riskLevel = aiResult.riskLevel;
+        }
+
+        if (aiResult.aiConfidence !== undefined) {
+            analysis.aiScore = aiResult.aiConfidence;
+        }
+
+        if (aiResult.threats && aiResult.threats.length > 0) {
+            // Add AI-detected threats to warnings
+            aiResult.threats.forEach(threat => {
+                if (!analysis.warnings.includes(threat)) {
+                    analysis.warnings.push(`[AI] ${threat}`);
+                }
+            });
+        }
+
+        if (aiResult.explanation) {
+            analysis.aiExplanation = aiResult.explanation;
+        }
+
+        // Mark as AI-analyzed
+        analysis.usedRealAI = true;
+
+        return analysis;
     }
 
     performAdvancedAIAnalisys(url) {  // typo in method name
@@ -719,28 +982,40 @@ class QRSafetyScanner {
         const safetyTitle = document.getElementById('safetyTitle');
         const safetyDescription = document.getElementById('safetyDescription');
 
+        // Show if real AI was used
+        const aiIndicator = analysis.usedRealAI ? ' 🤖' : '';
+        const analysisMethod = analysis.usedRealAI ? 'Browser AI Analysis' : 'Pattern Analysis';
+
         // Update safety indicator based on AI analysis
         if (analysis.riskLevel === 'low') {
             safetyIcon.className = 'safety-icon safe';
             safetyEmoji.textContent = '✅';
-            safetyTitle.textContent = 'Safe Link';
-            safetyDescription.textContent = `AI Confidence: ${analysis.aiScore}% - No threats detected`;
+            safetyTitle.textContent = 'Safe Link' + aiIndicator;
+            safetyDescription.textContent = `${analysisMethod} • Confidence: ${analysis.aiScore}% - No threats detected`;
             this.openButton.className = 'action-button primary';
             this.openButton.textContent = 'Open Link';
         } else if (analysis.riskLevel === 'medium') {
             safetyIcon.className = 'safety-icon warning';
             safetyEmoji.textContent = '⚠️';
-            safetyTitle.textContent = 'Caution Required';
-            safetyDescription.textContent = `AI Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
+            safetyTitle.textContent = 'Caution Required' + aiIndicator;
+            safetyDescription.textContent = `${analysisMethod} • Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
             this.openButton.className = 'action-button primary';
             this.openButton.textContent = 'Open with Caution';
         } else {
             safetyIcon.className = 'safety-icon danger';
             safetyEmoji.textContent = '⛔';
-            safetyTitle.textContent = 'Potential Threat';
-            safetyDescription.textContent = `AI Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
+            safetyTitle.textContent = 'Potential Threat' + aiIndicator;
+            safetyDescription.textContent = `${analysisMethod} • Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
             this.openButton.className = 'action-button danger';
             this.openButton.textContent = 'Open (Not Recommended)';
+        }
+
+        // Show AI explanation if available
+        if (analysis.aiExplanation) {
+            const aiNote = document.createElement('div');
+            aiNote.style.cssText = 'margin-top: 10px; padding: 10px; background: rgba(0,122,255,0.1); border-radius: 8px; font-size: 12px; color: #5AC8FA;';
+            aiNote.innerHTML = `<strong>AI Insight:</strong> ${analysis.aiExplanation}`;
+            safetyDescription.parentElement.appendChild(aiNote);
         }
 
         // Display homoglyph warning if detected

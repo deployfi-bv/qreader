@@ -60,6 +60,42 @@ body {
     flex: 1;
 }
 
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ai-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #00ff00, #00cc00);
+    border-radius: 20px;
+    animation: pulse 2s infinite;
+}
+
+.ai-status.inactive {
+    background: linear-gradient(135deg, #666, #444);
+    animation: none;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.ai-indicator {
+    font-size: 16px;
+}
+
+.ai-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #000;
+}
+
 .help-button {
     width: 36px;
     height: 36px;
@@ -667,6 +703,22 @@ canvas {
 
 /* Mobile fixes */
 @media (max-width: 414px) {
+    .header h1 {
+        font-size: 20px;
+    }
+
+    .header-buttons {
+        gap: 6px;
+    }
+
+    .ai-status {
+        padding: 4px 8px;
+    }
+
+    .ai-text {
+        display: none;
+    }
+
     .result-modal {
         max-height: calc(100vh - 40px);
         padding-bottom: 100px;

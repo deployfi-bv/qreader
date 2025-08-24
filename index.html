@@ -12,7 +12,13 @@
 <div class="app-container">
     <div class="header">
         <h1>AI QR Safety Scanner</h1>
-        <button class="help-button" id="helpButton">?</button>
+        <div class="header-buttons">
+            <div class="ai-status" id="aiStatus" style="display: none;">
+                <span class="ai-indicator">🤖</span>
+                <span class="ai-text">AI</span>
+            </div>
+            <button class="help-button" id="helpButton">?</button>
+        </div>
     </div>
 
     <div class="scanner-container">
@@ -194,8 +200,23 @@
         </div>
 
         <div class="help-section">
+            <h3>🤖 Browser AI Integration</h3>
+            <p>This scanner can use your browser's built-in AI for enhanced analysis when available.</p>
+            <p><strong>To enable Chrome AI (Gemini Nano):</strong></p>
+            <ul>
+                <li>Use Chrome Canary or Dev version 127+</li>
+                <li>Go to: chrome://flags/#optimization-guide-on-device-model</li>
+                <li>Enable "Optimization guide on device model"</li>
+                <li>Go to: chrome://flags/#prompt-api-for-gemini-nano</li>
+                <li>Enable "Prompt API for Gemini Nano"</li>
+                <li>Restart Chrome</li>
+            </ul>
+            <p>When active, a green 🤖 AI indicator appears in the header.</p>
+        </div>
+
+        <div class="help-section">
             <h3>🔒 Privacy</h3>
-            <p>This app processes all data locally on your device. No QR codes or URLs are sent to external servers for analysis.</p>
+            <p>This app processes all data locally on your device. When browser AI is available, analysis happens entirely offline using your browser's built-in AI model. No QR codes or URLs are sent to external servers.</p>
         </div>
     </div>
 </div>
