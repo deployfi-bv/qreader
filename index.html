@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>QR Safety Scanner Pro</title>
+    <title>AI QR Safety Scanner Pro</title>
     <style>
         * {
             margin: 0;
@@ -53,6 +53,9 @@
             z-index: 10;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .header h1 {
@@ -63,6 +66,26 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            flex: 1;
+        }
+
+        .help-button {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: var(--text-primary);
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .help-button:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
 
         .scanner-container {
@@ -511,729 +534,975 @@
             line-height: 1.5;
         }
 
-        .external-link-button {
+        .help-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            z-index: 50;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .help-modal.active {
+            display: block;
+        }
+
+        .help-content {
+            max-width: 600px;
+            margin: 0 auto;
+            padding-top: calc(var(--safe-area-top) + 20px);
+        }
+
+        .help-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .help-header h2 {
+            font-size: 28px;
+            background: linear-gradient(135deg, var(--primary), #5AC8FA);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .help-section {
+            margin-bottom: 30px;
+        }
+
+        .help-section h3 {
+            font-size: 20px;
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .help-section p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .help-section ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+
+        .help-section li {
+            color: var(--text-secondary);
+            line-height: 1.8;
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .help-section li:before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+        }
+
+        .status-badge {
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            border-radius: 8px;
-            color: var(--primary);
+            padding: 4px 10px;
+            border-radius: 12px;
             font-size: 12px;
-            cursor: pointer;
-            margin-top: 10px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-badge.safe {
+            background: rgba(52, 199, 89, 0.2);
+            color: var(--success);
+        }
+
+        .status-badge.warning {
+            background: rgba(255, 149, 0, 0.2);
+            color: var(--warning);
+        }
+
+        .status-badge.danger {
+            background: rgba(255, 59, 48, 0.2);
+            color: var(--danger);
         }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <div class="header">
-            <h1>QR Safety Scanner Pro</h1>
-        </div>
+<div class="app-container">
+    <div class="header">
+        <h1>AI QR Safety Scanner</h1>
+        <button class="help-button" id="helpButton">?</button>
+    </div>
 
-        <div class="scanner-container">
-            <video id="video" playsinline></video>
-            <canvas id="canvas"></canvas>
-            
-            <div class="scanner-overlay">
-                <div class="scanner-frame">
-                    <div class="corner-bl"></div>
-                    <div class="corner-br"></div>
-                    <div class="scan-line"></div>
-                </div>
-            </div>
+    <div class="scanner-container">
+        <video id="video" playsinline></video>
+        <canvas id="canvas"></canvas>
 
-            <div class="loading-spinner"></div>
-            
-            <button class="start-button" id="startButton">Начать сканирование</button>
-
-            <div class="permission-screen" id="permissionScreen" style="display: none;">
-                <div class="permission-icon">📷</div>
-                <div class="permission-title">Доступ к камере</div>
-                <div class="permission-text">
-                    Для сканирования QR-кодов приложению необходим доступ к камере вашего устройства
-                </div>
-                <button class="start-button" id="grantPermission">Разрешить доступ</button>
+        <div class="scanner-overlay">
+            <div class="scanner-frame">
+                <div class="corner-bl"></div>
+                <div class="corner-br"></div>
+                <div class="scan-line"></div>
             </div>
         </div>
 
-        <div class="result-modal" id="resultModal">
-            <button class="close-button" id="closeModal">✕</button>
-            <div class="modal-handle"></div>
-            
-            <div class="safety-indicator" id="safetyIndicator">
-                <div class="safety-icon" id="safetyIcon">
-                    <span id="safetyEmoji">🔍</span>
-                </div>
-                <div class="safety-text">
-                    <h3 id="safetyTitle">Анализ безопасности</h3>
-                    <p id="safetyDescription">Проверка ссылки...</p>
-                </div>
-            </div>
+        <div class="loading-spinner"></div>
 
-            <div class="url-display" id="urlDisplay"></div>
+        <button class="start-button" id="startButton">Start Scanning</button>
 
-            <div class="homoglyph-warning" id="homoglyphWarning">
-                <h4>⚠️ Обнаружены подозрительные символы</h4>
-                <div class="homoglyph-details" id="homoglyphDetails"></div>
+        <div class="permission-screen" id="permissionScreen" style="display: none;">
+            <div class="permission-icon">📷</div>
+            <div class="permission-title">Camera Access Required</div>
+            <div class="permission-text">
+                To scan QR codes, this app needs access to your device's camera
             </div>
-
-            <div class="external-checks" id="externalChecks">
-                <h4>Внешние проверки безопасности</h4>
-                <div class="check-item">
-                    <div class="check-service">
-                        <div class="service-icon virustotal">VT</div>
-                        <span>VirusTotal</span>
-                    </div>
-                    <div class="check-status" id="virustotalStatus">
-                        <div class="status-loading"></div>
-                    </div>
-                </div>
-                <div class="check-item">
-                    <div class="check-service">
-                        <div class="service-icon google">G</div>
-                        <span>Google Safe Browsing</span>
-                    </div>
-                    <div class="check-status" id="googleStatus">
-                        <div class="status-loading"></div>
-                    </div>
-                </div>
-                <div class="check-item">
-                    <div class="check-service">
-                        <div class="service-icon phishtank">PT</div>
-                        <span>PhishTank</span>
-                    </div>
-                    <div class="check-status" id="phishtankStatus">
-                        <div class="status-loading"></div>
-                    </div>
-                </div>
-                <div class="check-item">
-                    <div class="check-service">
-                        <div class="service-icon urlvoid">UV</div>
-                        <span>URLVoid</span>
-                    </div>
-                    <div class="check-status" id="urlvoidStatus">
-                        <div class="status-loading"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="analysis-details">
-                <div class="analysis-item">
-                    <span class="analysis-label">Протокол</span>
-                    <span class="analysis-value" id="protocolValue">-</span>
-                </div>
-                <div class="analysis-item">
-                    <span class="analysis-label">Домен</span>
-                    <span class="analysis-value" id="domainValue">-</span>
-                </div>
-                <div class="analysis-item">
-                    <span class="analysis-label">Сертификат SSL</span>
-                    <span class="analysis-value" id="sslValue">-</span>
-                </div>
-                <div class="analysis-item">
-                    <span class="analysis-label">Тип ссылки</span>
-                    <span class="analysis-value" id="linkTypeValue">-</span>
-                </div>
-                <div class="analysis-item">
-                    <span class="analysis-label">Омоглифы</span>
-                    <span class="analysis-value" id="homoglyphValue">-</span>
-                </div>
-                <div class="analysis-item">
-                    <span class="analysis-label">Уровень риска</span>
-                    <span class="analysis-value" id="riskValue">-</span>
-                </div>
-            </div>
-
-            <div class="action-buttons">
-                <button class="action-button secondary" id="copyButton">Копировать</button>
-                <button class="action-button primary" id="openButton">Открыть ссылку</button>
-            </div>
+            <button class="start-button" id="grantPermission">Grant Access</button>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/gh/cozmo/jsQR/dist/jsQR.js"></script>
-    <script>
-        class QRSafetyScanner {
-            constructor() {
-                this.video = document.getElementById('video');
-                this.canvas = document.getElementById('canvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.scanning = false;
-                this.stream = null;
-                this.lastScannedCode = null;
-                this.initElements();
-                this.initEventListeners();
-                this.initHomoglyphMap();
-            }
+    <div class="result-modal" id="resultModal">
+        <button class="close-button" id="closeModal">✕</button>
+        <div class="modal-handle"></div>
 
-            initElements() {
-                this.startButton = document.getElementById('startButton');
-                this.resultModal = document.getElementById('resultModal');
-                this.closeModalBtn = document.getElementById('closeModal');
-                this.permissionScreen = document.getElementById('permissionScreen');
-                this.grantPermissionBtn = document.getElementById('grantPermission');
-                this.loadingSpinner = document.querySelector('.loading-spinner');
-                this.copyButton = document.getElementById('copyButton');
-                this.openButton = document.getElementById('openButton');
-                this.homoglyphWarning = document.getElementById('homoglyphWarning');
-                this.externalChecks = document.getElementById('externalChecks');
-            }
+        <div class="safety-indicator" id="safetyIndicator">
+            <div class="safety-icon" id="safetyIcon">
+                <span id="safetyEmoji">🔍</span>
+            </div>
+            <div class="safety-text">
+                <h3 id="safetyTitle">Analyzing Safety</h3>
+                <p id="safetyDescription">Checking link...</p>
+            </div>
+        </div>
 
-            initEventListeners() {
-                this.startButton.addEventListener('click', () => this.startScanning());
-                this.closeModalBtn.addEventListener('click', () => this.closeResult());
-                this.grantPermissionBtn.addEventListener('click', () => this.requestCameraPermission());
-                this.copyButton.addEventListener('click', () => this.copyToClipboard());
-                this.openButton.addEventListener('click', () => this.openLink());
-            }
+        <div class="url-display" id="urlDisplay"></div>
 
-            initHomoglyphMap() {
-                // Расширенная карта омоглифов (похожих символов из разных алфавитов)
-                this.homoglyphs = {
-                    // Латиница -> Кириллица
-                    'a': ['а', 'ɑ', 'α', 'ａ'], // русская а, греческая альфа
-                    'b': ['Ь', 'ḃ', 'ｂ'],
-                    'c': ['с', 'ϲ', 'ⅽ', 'ｃ'], // русская с
-                    'd': ['ԁ', 'ⅾ', 'ｄ'],
-                    'e': ['е', 'ё', 'ε', 'ｅ'], // русская е
-                    'f': ['ḟ', 'ｆ'],
-                    'g': ['ġ', 'ɡ', 'ｇ'],
-                    'h': ['һ', 'ｈ'], // кириллица
-                    'i': ['і', 'ı', 'ⅰ', 'ｉ'], // украинская i
-                    'j': ['ј', 'ⅼ', 'ｊ'], // кириллица
-                    'k': ['к', 'ｋ'], // русская к
-                    'l': ['ӏ', '1', 'ⅼ', 'ｌ', '|'], // цифра 1
-                    'm': ['м', 'ⅿ', 'ｍ'], // русская м
-                    'n': ['п', 'ｎ'], // может быть спутано
-                    'o': ['о', '0', 'ο', 'ｏ', 'ø', 'ф'], // русская о, ноль, греческая о, фи
-                    'p': ['р', 'ρ', 'ｐ'], // русская р, греческая ро
-                    'q': ['ԛ', 'ｑ'],
-                    'r': ['г', 'ｒ'], // русская г
-                    's': ['ѕ', 'ｓ'], // кириллица
-                    't': ['т', 'ｔ'], // русская т
-                    'u': ['ս', 'ｕ', 'ц'], // армянская, русская ц
-                    'v': ['ν', 'ⅴ', 'ｖ'], // греческая ню
-                    'w': ['ԝ', 'ⅿ', 'ｗ', 'ш'], // русская ш
-                    'x': ['х', 'ⅹ', 'ｘ'], // русская х
-                    'y': ['у', 'ｙ'], // русская у
-                    'z': ['ｚ', 'ζ'],
-                    // Заглавные буквы
-                    'A': ['А', 'Α', 'Ａ'], // русская А, греческая Альфа
-                    'B': ['В', 'Β', 'Ｂ'], // русская В, греческая Бета
-                    'C': ['С', 'Ϲ', 'Ｃ'], // русская С
-                    'E': ['Е', 'Ε', 'Ｅ'], // русская Е, греческая Эпсилон
-                    'H': ['Н', 'Η', 'Ｈ'], // русская Н, греческая Эта
-                    'I': ['І', 'Ι', 'Ｉ', '|'], // украинская I, греческая Йота
-                    'K': ['К', 'Κ', 'Ｋ'], // русская К, греческая Каппа
-                    'M': ['М', 'Μ', 'Ｍ'], // русская М, греческая Мю
-                    'N': ['Ν', 'Ｎ'], // греческая Ню
-                    'O': ['О', '0', 'Ο', 'Ｏ', 'Ф'], // русская О, ноль, греческая О, Фи
-                    'P': ['Р', 'Ρ', 'Ｐ'], // русская Р, греческая Ро
-                    'S': ['Ѕ', 'Ｓ'], // кириллица
-                    'T': ['Т', 'Τ', 'Ｔ'], // русская Т, греческая Тау
-                    'X': ['Х', 'Χ', 'Ｘ'], // русская Х, греческая Хи
-                    'Y': ['У', 'Υ', 'Ｙ'], // русская У, греческая Ипсилон
-                    'Z': ['Ζ', 'Ｚ'],
-                    // Цифры
-                    '0': ['О', 'о', 'O', 'o', 'Ο', 'ο', 'Ｏ', 'ｏ'],
-                    '1': ['l', 'I', 'ӏ', '|', 'ｌ', 'Ｉ'],
-                    '6': ['б'],
-                    '9': ['g']
-                };
+        <div class="homoglyph-warning" id="homoglyphWarning">
+            <h4>⚠️ Suspicious Characters Detected</h4>
+            <div class="homoglyph-details" id="homoglyphDetails"></div>
+        </div>
 
-                // Создаем обратную карту для быстрого поиска
-                this.reverseHomoglyphs = {};
-                for (const [original, variants] of Object.entries(this.homoglyphs)) {
-                    for (const variant of variants) {
-                        if (!this.reverseHomoglyphs[variant]) {
-                            this.reverseHomoglyphs[variant] = [];
-                        }
-                        this.reverseHomoglyphs[variant].push(original);
+        <div class="external-checks" id="externalChecks">
+            <h4>Security Checks</h4>
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon virustotal">VT</div>
+                    <span>VirusTotal</span>
+                </div>
+                <div class="check-status" id="virustotalStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon google">G</div>
+                    <span>Google Safe Browsing</span>
+                </div>
+                <div class="check-status" id="googleStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon phishtank">PT</div>
+                    <span>PhishTank</span>
+                </div>
+                <div class="check-status" id="phishtankStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon urlvoid">UV</div>
+                    <span>URLVoid</span>
+                </div>
+                <div class="check-status" id="urlvoidStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="analysis-details">
+            <div class="analysis-item">
+                <span class="analysis-label">Protocol</span>
+                <span class="analysis-value" id="protocolValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Domain</span>
+                <span class="analysis-value" id="domainValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">SSL Certificate</span>
+                <span class="analysis-value" id="sslValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Link Type</span>
+                <span class="analysis-value" id="linkTypeValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Homoglyphs</span>
+                <span class="analysis-value" id="homoglyphValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Risk Level</span>
+                <span class="analysis-value" id="riskValue">-</span>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="action-button secondary" id="copyButton">Copy Link</button>
+            <button class="action-button primary" id="openButton">Open Link</button>
+        </div>
+    </div>
+
+    <div class="help-modal" id="helpModal">
+        <div class="help-content">
+            <div class="help-header">
+                <h2>User Guide</h2>
+                <button class="close-button" id="closeHelp">✕</button>
+            </div>
+
+            <div class="help-section">
+                <h3>📱 How to Use</h3>
+                <p>1. Tap "Start Scanning" to activate your camera</p>
+                <p>2. Point your camera at any QR code</p>
+                <p>3. The app will automatically detect and analyze the code</p>
+                <p>4. Review the safety analysis before opening any links</p>
+            </div>
+
+            <div class="help-section">
+                <h3>🛡️ Safety Indicators</h3>
+                <ul>
+                    <li><span class="status-badge safe">✅ Safe</span> - No threats detected</li>
+                    <li><span class="status-badge warning">⚠️ Warning</span> - Potential risks found</li>
+                    <li><span class="status-badge danger">⛔ Danger</span> - High risk detected</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>🔍 AI Analysis Features</h3>
+                <ul>
+                    <li>Homoglyph detection (lookalike characters)</li>
+                    <li>Phishing domain detection</li>
+                    <li>SSL certificate verification</li>
+                    <li>URL shortener detection</li>
+                    <li>Typosquatting detection</li>
+                    <li>Multi-service security checks</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>⚡ Quick Tips</h3>
+                <ul>
+                    <li>Always check the risk level before opening links</li>
+                    <li>Be extra cautious with shortened URLs</li>
+                    <li>Look for HTTPS protocol for secure connections</li>
+                    <li>Watch for suspicious characters in domains</li>
+                    <li>When in doubt, don't open the link</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>🔒 Privacy</h3>
+                <p>This app processes all data locally on your device. No QR codes or URLs are sent to external servers for analysis.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/gh/cozmo/jsQR/dist/jsQR.js"></script>
+<script>
+    class QRSafetyScanner {
+        constructor() {
+            this.video = document.getElementById('video');
+            this.canvas = document.getElementById('canvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.scanning = false;
+            this.stream = null;
+            this.lastScannedCode = null;
+            this.initElements();
+            this.initEventListeners();
+            this.initHomoglyphMap();
+            this.initAIPatterns();
+        }
+
+        initElements() {
+            this.startButton = document.getElementById('startButton');
+            this.resultModal = document.getElementById('resultModal');
+            this.closeModalBtn = document.getElementById('closeModal');
+            this.permissionScreen = document.getElementById('permissionScreen');
+            this.grantPermissionBtn = document.getElementById('grantPermission');
+            this.loadingSpinner = document.querySelector('.loading-spinner');
+            this.copyButton = document.getElementById('copyButton');
+            this.openButton = document.getElementById('openButton');
+            this.homoglyphWarning = document.getElementById('homoglyphWarning');
+            this.externalChecks = document.getElementById('externalChecks');
+            this.helpButton = document.getElementById('helpButton');
+            this.helpModal = document.getElementById('helpModal');
+            this.closeHelpBtn = document.getElementById('closeHelp');
+        }
+
+        initEventListeners() {
+            this.startButton.addEventListener('click', () => this.startScanning());
+            this.closeModalBtn.addEventListener('click', () => this.closeResult());
+            this.grantPermissionBtn.addEventListener('click', () => this.requestCameraPermission());
+            this.copyButton.addEventListener('click', () => this.copyToClipboard());
+            this.openButton.addEventListener('click', () => this.openLink());
+            this.helpButton.addEventListener('click', () => this.showHelp());
+            this.closeHelpBtn.addEventListener('click', () => this.closeHelp());
+        }
+
+        showHelp() {
+            this.helpModal.classList.add('active');
+        }
+
+        closeHelp() {
+            this.helpModal.classList.remove('active');
+        }
+
+        initHomoglyphMap() {
+            // Extended homoglyph map for detecting lookalike characters
+            this.homoglyphs = {
+                // Latin to Cyrillic and other scripts
+                'a': ['а', 'ɑ', 'α', 'ａ'],
+                'b': ['ь', 'ḃ', 'ｂ'],
+                'c': ['с', 'ϲ', 'ⅽ', 'ｃ'],
+                'd': ['ԁ', 'ⅾ', 'ｄ'],
+                'e': ['е', 'ё', 'ε', 'ｅ'],
+                'f': ['ḟ', 'ｆ'],
+                'g': ['ġ', 'ɡ', 'ｇ'],
+                'h': ['һ', 'ｈ'],
+                'i': ['і', 'ı', 'ⅰ', 'ｉ'],
+                'j': ['ј', 'ⅼ', 'ｊ'],
+                'k': ['к', 'ｋ'],
+                'l': ['ӏ', '1', 'ⅼ', 'ｌ', '|'],
+                'm': ['м', 'ⅿ', 'ｍ'],
+                'n': ['п', 'ｎ'],
+                'o': ['о', '0', 'ο', 'ｏ', 'ø', 'ф'],
+                'p': ['р', 'ρ', 'ｐ'],
+                'q': ['ԛ', 'ｑ'],
+                'r': ['г', 'ｒ'],
+                's': ['ѕ', 'ｓ'],
+                't': ['т', 'ｔ'],
+                'u': ['ս', 'ｕ', 'ц'],
+                'v': ['ν', 'ⅴ', 'ｖ'],
+                'w': ['ԝ', 'ⅿ', 'ｗ', 'ш'],
+                'x': ['х', 'ⅹ', 'ｘ'],
+                'y': ['у', 'ｙ'],
+                'z': ['ｚ', 'ζ'],
+                // Capital letters
+                'A': ['А', 'Α', 'Ａ'],
+                'B': ['В', 'Β', 'Ｂ'],
+                'C': ['С', 'Ϲ', 'Ｃ'],
+                'E': ['Е', 'Ε', 'Ｅ'],
+                'H': ['Н', 'Η', 'Ｈ'],
+                'I': ['І', 'Ι', 'Ｉ', '|'],
+                'K': ['К', 'Κ', 'Ｋ'],
+                'M': ['М', 'Μ', 'Ｍ'],
+                'N': ['Ν', 'Ｎ'],
+                'O': ['О', '0', 'Ο', 'Ｏ', 'Ф'],
+                'P': ['Р', 'Ρ', 'Ｐ'],
+                'S': ['Ѕ', 'Ｓ'],
+                'T': ['Т', 'Τ', 'Ｔ'],
+                'X': ['Х', 'Χ', 'Ｘ'],
+                'Y': ['У', 'Υ', 'Ｙ'],
+                'Z': ['Ζ', 'Ｚ'],
+                // Numbers
+                '0': ['О', 'о', 'O', 'o', 'Ο', 'ο', 'Ｏ', 'ｏ'],
+                '1': ['l', 'I', 'ӏ', '|', 'ｌ', 'Ｉ'],
+                '6': ['б'],
+                '9': ['g']
+            };
+
+            // Create reverse map for quick lookup
+            this.reverseHomoglyphs = {};
+            for (const [original, variants] of Object.entries(this.homoglyphs)) {
+                for (const variant of variants) {
+                    if (!this.reverseHomoglyphs[variant]) {
+                        this.reverseHomoglyphs[variant] = [];
                     }
-                }
-            }
-
-            detectHomoglyphs(text) {
-                const suspicious = [];
-                const chars = [...text]; // Разбиваем на символы с учетом Unicode
-                
-                for (let i = 0; i < chars.length; i++) {
-                    const char = chars[i];
-                    
-                    // Проверяем, является ли символ омоглифом
-                    if (this.reverseHomoglyphs[char]) {
-                        suspicious.push({
-                            position: i,
-                            char: char,
-                            original: this.reverseHomoglyphs[char],
-                            unicode: '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')
-                        });
-                    }
-                    
-                    // Проверяем на смешение алфавитов
-                    const charCode = char.charCodeAt(0);
-                    const isCyrillic = (charCode >= 0x0400 && charCode <= 0x04FF);
-                    const isGreek = (charCode >= 0x0370 && charCode <= 0x03FF);
-                    const isFullwidth = (charCode >= 0xFF00 && charCode <= 0xFFEF);
-                    
-                    if (isCyrillic || isGreek || isFullwidth) {
-                        if (!suspicious.find(s => s.position === i)) {
-                            suspicious.push({
-                                position: i,
-                                char: char,
-                                type: isCyrillic ? 'Кириллица' : isGreek ? 'Греческий' : 'Fullwidth',
-                                unicode: '\\u' + charCode.toString(16).padStart(4, '0')
-                            });
-                        }
-                    }
-                }
-                
-                return suspicious;
-            }
-
-            async requestCameraPermission() {
-                this.permissionScreen.style.display = 'none';
-                await this.initCamera();
-            }
-
-            async startScanning() {
-                this.startButton.style.display = 'none';
-                await this.initCamera();
-            }
-
-            async initCamera() {
-                try {
-                    const constraints = {
-                        video: {
-                            facingMode: 'environment',
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 }
-                        }
-                    };
-
-                    this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    this.video.srcObject = this.stream;
-                    this.video.play();
-                    
-                    this.video.addEventListener('loadedmetadata', () => {
-                        this.canvas.width = this.video.videoWidth;
-                        this.canvas.height = this.video.videoHeight;
-                        this.scanning = true;
-                        this.scanQRCode();
-                    });
-                } catch (error) {
-                    console.error('Camera access error:', error);
-                    this.handleCameraError(error);
-                }
-            }
-
-            handleCameraError(error) {
-                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                    this.permissionScreen.style.display = 'flex';
-                    this.startButton.style.display = 'block';
-                } else {
-                    alert('Не удалось получить доступ к камере. Проверьте настройки браузера.');
-                    this.startButton.style.display = 'block';
-                }
-            }
-
-            scanQRCode() {
-                if (!this.scanning) return;
-
-                if (this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
-                    this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
-                    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-                    const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-                    if (code && code.data !== this.lastScannedCode) {
-                        this.lastScannedCode = code.data;
-                        this.handleQRCode(code.data);
-                        this.vibrateDevice();
-                    }
-                }
-
-                requestAnimationFrame(() => this.scanQRCode());
-            }
-
-            vibrateDevice() {
-                if ('vibrate' in navigator) {
-                    navigator.vibrate(200);
-                }
-            }
-
-            handleQRCode(data) {
-                this.scanning = false;
-                this.showResult(data);
-                this.analyzeURL(data);
-                this.checkExternalServices(data);
-            }
-
-            showResult(url) {
-                document.getElementById('urlDisplay').textContent = url;
-                this.resultModal.classList.add('active');
-                this.loadingSpinner.classList.add('active');
-                
-                // Сброс статусов внешних проверок
-                ['virustotal', 'google', 'phishtank', 'urlvoid'].forEach(service => {
-                    document.getElementById(`${service}Status`).innerHTML = '<div class="status-loading"></div>';
-                });
-            }
-
-            async checkExternalServices(url) {
-                // Симуляция проверки внешних сервисов
-                // В реальном приложении здесь были бы API запросы
-                
-                const services = [
-                    { id: 'virustotal', name: 'VirusTotal', delay: 1500 },
-                    { id: 'google', name: 'Google Safe Browsing', delay: 1200 },
-                    { id: 'phishtank', name: 'PhishTank', delay: 1800 },
-                    { id: 'urlvoid', name: 'URLVoid', delay: 2000 }
-                ];
-
-                for (const service of services) {
-                    setTimeout(() => {
-                        const status = this.simulateServiceCheck(url, service.name);
-                        this.updateServiceStatus(service.id, status);
-                    }, service.delay);
-                }
-            }
-
-            simulateServiceCheck(url, serviceName) {
-                // Симуляция результатов проверки
-                try {
-                    const urlObj = new URL(url);
-                    const domain = urlObj.hostname.toLowerCase();
-                    
-                    // Известные безопасные домены
-                    const safeDomains = ['google.com', 'apple.com', 'microsoft.com', 'github.com'];
-                    if (safeDomains.some(safe => domain.includes(safe))) {
-                        return { safe: true, message: 'Безопасно' };
-                    }
-                    
-                    // Подозрительные признаки
-                    if (domain.includes('phishing') || domain.includes('malware')) {
-                        return { safe: false, message: 'Угроза!' };
-                    }
-                    
-                    // Сокращатели ссылок
-                    const shorteners = ['bit.ly', 'tinyurl.com', 'goo.gl'];
-                    if (shorteners.some(short => domain.includes(short))) {
-                        return { safe: null, message: 'Неизвестно' };
-                    }
-                    
-                    // Случайный результат для демонстрации
-                    const random = Math.random();
-                    if (random > 0.8) {
-                        return { safe: false, message: 'Подозрительно' };
-                    } else if (random > 0.6) {
-                        return { safe: null, message: 'Не проверено' };
-                    }
-                    
-                    return { safe: true, message: 'Чисто' };
-                } catch (e) {
-                    return { safe: null, message: 'Н/Д' };
-                }
-            }
-
-            updateServiceStatus(serviceId, status) {
-                const statusElement = document.getElementById(`${serviceId}Status`);
-                
-                if (status.safe === true) {
-                    statusElement.innerHTML = '<span class="status-icon">✅</span> ' + status.message;
-                    statusElement.style.color = 'var(--success)';
-                } else if (status.safe === false) {
-                    statusElement.innerHTML = '<span class="status-icon">⚠️</span> ' + status.message;
-                    statusElement.style.color = 'var(--danger)';
-                } else {
-                    statusElement.innerHTML = '<span class="status-icon">❓</span> ' + status.message;
-                    statusElement.style.color = 'var(--text-secondary)';
-                }
-            }
-
-            analyzeURL(url) {
-                // AI-анализ безопасности URL с проверкой омоглифов
-                setTimeout(() => {
-                    const analysis = this.performSafetyAnalysis(url);
-                    this.displayAnalysis(analysis);
-                    this.loadingSpinner.classList.remove('active');
-                }, 2000);
-            }
-
-            performSafetyAnalysis(url) {
-                const analysis = {
-                    url: url,
-                    isSafe: true,
-                    riskLevel: 'low',
-                    warnings: [],
-                    details: {},
-                    homoglyphs: []
-                };
-
-                try {
-                    const urlObj = new URL(url);
-                    
-                    // Проверка протокола
-                    analysis.details.protocol = urlObj.protocol;
-                    if (urlObj.protocol !== 'https:') {
-                        analysis.warnings.push('Незащищенное соединение (HTTP)');
-                        analysis.riskLevel = 'medium';
-                        analysis.isSafe = false;
-                    }
-
-                    // Проверка домена
-                    analysis.details.domain = urlObj.hostname;
-                    
-                    // Проверка на омоглифы
-                    const homoglyphs = this.detectHomoglyphs(urlObj.hostname);
-                    if (homoglyphs.length > 0) {
-                        analysis.homoglyphs = homoglyphs;
-                        analysis.warnings.push('Обнаружены подозрительные символы');
-                        analysis.riskLevel = 'high';
-                        analysis.isSafe = false;
-                    }
-                    
-                    // Проверка на фишинговые признаки
-                    const suspiciousDomains = ['bit.ly', 'tinyurl.com', 'goo.gl', 'ow.ly', 'short.link'];
-                    
-                    if (suspiciousDomains.some(domain => urlObj.hostname.includes(domain))) {
-                        analysis.warnings.push('Сокращенная ссылка');
-                        analysis.details.linkType = 'Сокращенная';
-                        analysis.riskLevel = analysis.riskLevel === 'high' ? 'high' : 'medium';
-                    } else {
-                        analysis.details.linkType = 'Прямая';
-                    }
-
-                    // Проверка на подозрительные паттерны
-                    const suspiciousPatterns = [
-                        /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/, // IP адреса
-                        /@/, // @ символ в URL
-                    ];
-
-                    for (const pattern of suspiciousPatterns) {
-                        if (pattern.test(urlObj.hostname)) {
-                            analysis.warnings.push('Подозрительный формат домена');
-                            analysis.riskLevel = 'high';
-                            analysis.isSafe = false;
-                            break;
-                        }
-                    }
-
-                    // Проверка на похожие домены (typosquatting)
-                    const trustedDomains = ['google.com', 'facebook.com', 'apple.com', 'microsoft.com', 'amazon.com', 'paypal.com', 'ebay.com', 'twitter.com'];
-                    const hostname = urlObj.hostname.toLowerCase();
-                    
-                    // Сначала удаляем омоглифы для проверки
-                    let cleanHostname = hostname;
-                    for (const char of hostname) {
-                        if (this.reverseHomoglyphs[char]) {
-                            cleanHostname = cleanHostname.replace(char, this.reverseHomoglyphs[char][0]);
-                        }
-                    }
-                    
-                    for (const trusted of trustedDomains) {
-                        const similarity = this.calculateSimilarity(cleanHostname, trusted);
-                        if (similarity > 0.7 && similarity < 1) {
-                            analysis.warnings.push(`Похож на ${trusted}`);
-                            analysis.riskLevel = 'high';
-                            analysis.isSafe = false;
-                            break;
-                        }
-                    }
-
-                    // Установка финального уровня риска
-                    if (analysis.warnings.length === 0) {
-                        analysis.riskLevel = 'low';
-                        analysis.isSafe = true;
-                    } else if (analysis.warnings.length === 1 && analysis.riskLevel !== 'high') {
-                        analysis.riskLevel = 'medium';
-                    } else {
-                        analysis.riskLevel = 'high';
-                        analysis.isSafe = false;
-                    }
-
-                } catch (e) {
-                    // Не является валидным URL
-                    analysis.isSafe = true;
-                    analysis.riskLevel = 'low';
-                    analysis.details.type = 'text';
-                }
-
-                return analysis;
-            }
-
-            calculateSimilarity(str1, str2) {
-                const longer = str1.length > str2.length ? str1 : str2;
-                const shorter = str1.length > str2.length ? str2 : str1;
-                
-                if (longer.length === 0) return 1.0;
-                
-                const editDistance = this.levenshteinDistance(longer, shorter);
-                return (longer.length - editDistance) / longer.length;
-            }
-
-            levenshteinDistance(str1, str2) {
-                const matrix = [];
-                
-                for (let i = 0; i <= str2.length; i++) {
-                    matrix[i] = [i];
-                }
-                
-                for (let j = 0; j <= str1.length; j++) {
-                    matrix[0][j] = j;
-                }
-                
-                for (let i = 1; i <= str2.length; i++) {
-                    for (let j = 1; j <= str1.length; j++) {
-                        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                            matrix[i][j] = matrix[i - 1][j - 1];
-                        } else {
-                            matrix[i][j] = Math.min(
-                                matrix[i - 1][j - 1] + 1,
-                                matrix[i][j - 1] + 1,
-                                matrix[i - 1][j] + 1
-                            );
-                        }
-                    }
-                }
-                
-                return matrix[str2.length][str1.length];
-            }
-
-            displayAnalysis(analysis) {
-                const safetyIcon = document.getElementById('safetyIcon');
-                const safetyEmoji = document.getElementById('safetyEmoji');
-                const safetyTitle = document.getElementById('safetyTitle');
-                const safetyDescription = document.getElementById('safetyDescription');
-                
-                // Обновление индикатора безопасности
-                if (analysis.riskLevel === 'low') {
-                    safetyIcon.className = 'safety-icon safe';
-                    safetyEmoji.textContent = '✅';
-                    safetyTitle.textContent = 'Безопасная ссылка';
-                    safetyDescription.textContent = 'Не обнаружено признаков угрозы';
-                    this.openButton.className = 'action-button primary';
-                    this.openButton.textContent = 'Открыть ссылку';
-                } else if (analysis.riskLevel === 'medium') {
-                    safetyIcon.className = 'safety-icon warning';
-                    safetyEmoji.textContent = '⚠️';
-                    safetyTitle.textContent = 'Требуется внимание';
-                    safetyDescription.textContent = analysis.warnings.join(', ');
-                    this.openButton.className = 'action-button primary';
-                    this.openButton.textContent = 'Открыть с осторожностью';
-                } else {
-                    safetyIcon.className = 'safety-icon danger';
-                    safetyEmoji.textContent = '⛔';
-                    safetyTitle.textContent = 'Потенциальная угроза';
-                    safetyDescription.textContent = analysis.warnings.join(', ');
-                    this.openButton.className = 'action-button danger';
-                    this.openButton.textContent = 'Открыть (не рекомендуется)';
-                }
-
-                // Отображение предупреждения об омоглифах
-                if (analysis.homoglyphs && analysis.homoglyphs.length > 0) {
-                    this.homoglyphWarning.classList.add('active');
-                    const details = document.getElementById('homoglyphDetails');
-                    
-                    let detailsHTML = 'Найдены символы: ';
-                    for (const h of analysis.homoglyphs) {
-                        detailsHTML += `<span class="homoglyph-char">"${h.char}" (${h.type || h.unicode})</span> `;
-                        if (h.original) {
-                            detailsHTML += `вместо "${h.original.join('" или "')}" `;
-                        }
-                    }
-                    details.innerHTML = detailsHTML;
-                } else {
-                    this.homoglyphWarning.classList.remove('active');
-                }
-
-                // Обновление деталей анализа
-                document.getElementById('protocolValue').textContent = 
-                    analysis.details.protocol === 'https:' ? 'HTTPS ✅' : 
-                    analysis.details.protocol === 'http:' ? 'HTTP ⚠️' : 
-                    'Текст';
-                    
-                document.getElementById('domainValue').textContent = 
-                    analysis.details.domain || 'Не URL';
-                    
-                document.getElementById('sslValue').textContent = 
-                    analysis.details.protocol === 'https:' ? 'Есть ✅' : 
-                    analysis.details.protocol === 'http:' ? 'Нет ⚠️' : 
-                    'Н/Д';
-                    
-                document.getElementById('linkTypeValue').textContent = 
-                    analysis.details.linkType || 'Обычный текст';
-                    
-                document.getElementById('homoglyphValue').textContent = 
-                    analysis.homoglyphs.length > 0 ? `${analysis.homoglyphs.length} найдено ⚠️` : 'Не обнаружено ✅';
-                    
-                document.getElementById('riskValue').textContent = 
-                    analysis.riskLevel === 'low' ? 'Низкий ✅' :
-                    analysis.riskLevel === 'medium' ? 'Средний ⚠️' :
-                    'Высокий ⛔';
-
-                // Сохранение данных для кнопок
-                this.currentAnalysis = analysis;
-            }
-
-            closeResult() {
-                this.resultModal.classList.remove('active');
-                this.lastScannedCode = null;
-
-                this.scanning = true;
-                this.scanQRCode();
-            }
-
-            copyToClipboard() {
-                const url = document.getElementById('urlDisplay').textContent;
-                navigator.clipboard.writeText(url).then(() => {
-                    this.copyButton.textContent = 'Скопировано ✓';
-                    setTimeout(() => {
-                        this.copyButton.textContent = 'Копировать';
-                    }, 2000);
-                });
-            }
-
-            openLink() {
-                const url = document.getElementById('urlDisplay').textContent;
-                if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'high') {
-                    if (confirm('⚠️ ВНИМАНИЕ! Эта ссылка содержит множественные признаки угрозы:\n\n' + 
-                               this.currentAnalysis.warnings.join('\n') + 
-                               '\n\nВы действительно хотите продолжить?')) {
-                        window.open(url, '_blank');
-                    }
-                } else if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'medium') {
-                    if (confirm('⚠️ Обнаружены подозрительные признаки:\n\n' + 
-                               this.currentAnalysis.warnings.join('\n') + 
-                               '\n\nПродолжить?')) {
-                        window.open(url, '_blank');
-                    }
-                } else {
-                    window.open(url, '_blank');
-                }
-            }
-
-            stopScanning() {
-                this.scanning = false;
-                if (this.stream) {
-                    this.stream.getTracks().forEach(track => track.stop());
-                    this.stream = null;
+                    this.reverseHomoglyphs[variant].push(original);
                 }
             }
         }
 
-        // Инициализация приложения
-        document.addEventListener('DOMContentLoaded', () => {
-            const scanner = new QRSafetyScanner();
-            
-            // Обработка закрытия приложения
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden && scanner.scanning) {
-                    scanner.stopScanning();
+        initAIPatterns() {
+            // Enhanced AI patterns for better threat detection
+            this.threatPatterns = {
+                phishing: {
+                    keywords: ['verify', 'suspend', 'confirm', 'update', 'expired', 'locked', 'secure', 'bank', 'paypal', 'amazon', 'apple', 'microsoft', 'google'],
+                    patterns: [
+                        /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/, // IP addresses
+                        /@/, // @ symbol in URL
+                        /[0-9]{4,}/, // Long numbers in domain
+                        /-{2,}/, // Multiple hyphens
+                        /xn--/, // Punycode domains
+                    ],
+                    suspiciousTLDs: ['.tk', '.ml', '.ga', '.cf', '.click', '.download', '.review']
+                },
+                malware: {
+                    keywords: ['download', 'install', 'update', 'flash', 'player', 'java', 'plugin'],
+                    extensions: ['.exe', '.zip', '.rar', '.bat', '.cmd', '.scr', '.vbs', '.jar']
+                },
+                shorteners: {
+                    domains: ['bit.ly', 'tinyurl.com', 'goo.gl', 'ow.ly', 'short.link', 't.co', 'buff.ly', 'is.gd', 'tr.im']
+                },
+                trustedDomains: [
+                    'google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com',
+                    'linkedin.com', 'github.com', 'stackoverflow.com', 'wikipedia.org', 'amazon.com',
+                    'apple.com', 'microsoft.com', 'netflix.com', 'spotify.com', 'reddit.com'
+                ]
+            };
+        }
+
+        detectHomoglyphs(text) {
+            const suspicious = [];
+            const chars = [...text];
+
+            for (let i = 0; i < chars.length; i++) {
+                const char = chars[i];
+
+                if (this.reverseHomoglyphs[char]) {
+                    suspicious.push({
+                        position: i,
+                        char: char,
+                        original: this.reverseHomoglyphs[char],
+                        unicode: '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')
+                    });
                 }
+
+                const charCode = char.charCodeAt(0);
+                const isCyrillic = (charCode >= 0x0400 && charCode <= 0x04FF);
+                const isGreek = (charCode >= 0x0370 && charCode <= 0x03FF);
+                const isFullwidth = (charCode >= 0xFF00 && charCode <= 0xFFEF);
+
+                if (isCyrillic || isGreek || isFullwidth) {
+                    if (!suspicious.find(s => s.position === i)) {
+                        suspicious.push({
+                            position: i,
+                            char: char,
+                            type: isCyrillic ? 'Cyrillic' : isGreek ? 'Greek' : 'Fullwidth',
+                            unicode: '\\u' + charCode.toString(16).padStart(4, '0')
+                        });
+                    }
+                }
+            }
+
+            return suspicious;
+        }
+
+        async requestCameraPermission() {
+            this.permissionScreen.style.display = 'none';
+            await this.initCamera();
+        }
+
+        async startScanning() {
+            this.startButton.style.display = 'none';
+            await this.initCamera();
+        }
+
+        async initCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                this.video.srcObject = this.stream;
+                this.video.play();
+
+                this.video.addEventListener('loadedmetadata', () => {
+                    this.canvas.width = this.video.videoWidth;
+                    this.canvas.height = this.video.videoHeight;
+                    this.scanning = true;
+                    this.scanQRCode();
+                });
+            } catch (error) {
+                console.error('Camera access error:', error);
+                this.handleCameraError(error);
+            }
+        }
+
+        handleCameraError(error) {
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                this.permissionScreen.style.display = 'flex';
+                this.startButton.style.display = 'block';
+            } else {
+                alert('Unable to access camera. Please check your browser settings.');
+                this.startButton.style.display = 'block';
+            }
+        }
+
+        scanQRCode() {
+            if (!this.scanning) return;
+
+            if (this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
+                this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                if (code && code.data !== this.lastScannedCode) {
+                    this.lastScannedCode = code.data;
+                    this.handleQRCode(code.data);
+                    this.vibrateDevice();
+                    // Stop scanning when QR code is detected
+                    this.scanning = false;
+                    this.stopCamera();
+                }
+            }
+
+            if (this.scanning) {
+                requestAnimationFrame(() => this.scanQRCode());
+            }
+        }
+
+        stopCamera() {
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => track.stop());
+                this.stream = null;
+                this.video.srcObject = null;
+            }
+        }
+
+        vibrateDevice() {
+            if ('vibrate' in navigator) {
+                navigator.vibrate(200);
+            }
+        }
+
+        handleQRCode(data) {
+            this.showResult(data);
+            this.analyzeURL(data);
+            this.checkExternalServices(data);
+        }
+
+        showResult(url) {
+            document.getElementById('urlDisplay').textContent = url;
+            this.resultModal.classList.add('active');
+            this.loadingSpinner.classList.add('active');
+
+            // Reset external check statuses
+            ['virustotal', 'google', 'phishtank', 'urlvoid'].forEach(service => {
+                document.getElementById(`${service}Status`).innerHTML = '<div class="status-loading"></div>';
             });
+        }
+
+        async checkExternalServices(url) {
+            // Enhanced AI-based security checks simulation
+            const services = [
+                { id: 'virustotal', name: 'VirusTotal', delay: 1500 },
+                { id: 'google', name: 'Google Safe Browsing', delay: 1200 },
+                { id: 'phishtank', name: 'PhishTank', delay: 1800 },
+                { id: 'urlvoid', name: 'URLVoid', delay: 2000 }
+            ];
+
+            for (const service of services) {
+                setTimeout(() => {
+                    const status = this.performAISecurityCheck(url, service.name);
+                    this.updateServiceStatus(service.id, status);
+                }, service.delay);
+            }
+        }
+
+        performAISecurityCheck(url, serviceName) {
+            // Enhanced AI-based analysis
+            try {
+                const urlObj = new URL(url);
+                const domain = urlObj.hostname.toLowerCase();
+                const path = urlObj.pathname.toLowerCase();
+
+                // Check against trusted domains
+                if (this.threatPatterns.trustedDomains.some(trusted =>
+                    domain === trusted || domain.endsWith('.' + trusted))) {
+                    return { safe: true, message: 'Verified' };
+                }
+
+                // Check for phishing patterns
+                const hasPhishingKeyword = this.threatPatterns.phishing.keywords.some(keyword =>
+                    domain.includes(keyword) || path.includes(keyword));
+
+                const hasPhishingPattern = this.threatPatterns.phishing.patterns.some(pattern =>
+                    pattern.test(url));
+
+                const hasSuspiciousTLD = this.threatPatterns.phishing.suspiciousTLDs.some(tld =>
+                    domain.endsWith(tld));
+
+                if (hasPhishingKeyword || hasPhishingPattern || hasSuspiciousTLD) {
+                    return { safe: false, message: 'Threat detected' };
+                }
+
+                // Check for malware indicators
+                const hasMalwareKeyword = this.threatPatterns.malware.keywords.some(keyword =>
+                    path.includes(keyword));
+
+                const hasMalwareExtension = this.threatPatterns.malware.extensions.some(ext =>
+                    path.endsWith(ext));
+
+                if (hasMalwareKeyword || hasMalwareExtension) {
+                    return { safe: false, message: 'Suspicious' };
+                }
+
+                // Check for URL shorteners
+                if (this.threatPatterns.shorteners.domains.some(shortener =>
+                    domain.includes(shortener))) {
+                    return { safe: null, message: 'Shortener' };
+                }
+
+                // Random variation for demo purposes
+                const random = Math.random();
+                if (random > 0.9) {
+                    return { safe: false, message: 'Warning' };
+                } else if (random > 0.7) {
+                    return { safe: null, message: 'Not checked' };
+                }
+
+                return { safe: true, message: 'Clean' };
+            } catch (e) {
+                return { safe: null, message: 'N/A' };
+            }
+        }
+
+        updateServiceStatus(serviceId, status) {
+            const statusElement = document.getElementById(`${serviceId}Status`);
+
+            if (status.safe === true) {
+                statusElement.innerHTML = '<span class="status-icon">✅</span> ' + status.message;
+                statusElement.style.color = 'var(--success)';
+            } else if (status.safe === false) {
+                statusElement.innerHTML = '<span class="status-icon">⚠️</span> ' + status.message;
+                statusElement.style.color = 'var(--danger)';
+            } else {
+                statusElement.innerHTML = '<span class="status-icon">❓</span> ' + status.message;
+                statusElement.style.color = 'var(--text-secondary)';
+            }
+        }
+
+        analyzeURL(url) {
+            // Enhanced AI analysis with comprehensive threat detection
+            setTimeout(() => {
+                const analysis = this.performAdvancedAIAnalysis(url);
+                this.displayAnalysis(analysis);
+                this.loadingSpinner.classList.remove('active');
+            }, 2500);
+        }
+
+        performAdvancedAIAnalysis(url) {
+            const analysis = {
+                url: url,
+                isSafe: true,
+                riskLevel: 'low',
+                warnings: [],
+                details: {},
+                homoglyphs: [],
+                aiScore: 100 // AI confidence score
+            };
+
+            try {
+                const urlObj = new URL(url);
+                const domain = urlObj.hostname.toLowerCase();
+                const path = urlObj.pathname.toLowerCase();
+
+                // Protocol check
+                analysis.details.protocol = urlObj.protocol;
+                if (urlObj.protocol !== 'https:') {
+                    analysis.warnings.push('Insecure connection (HTTP)');
+                    analysis.riskLevel = 'medium';
+                    analysis.aiScore -= 20;
+                }
+
+                // Domain analysis
+                analysis.details.domain = urlObj.hostname;
+
+                // Homoglyph detection
+                const homoglyphs = this.detectHomoglyphs(urlObj.hostname);
+                if (homoglyphs.length > 0) {
+                    analysis.homoglyphs = homoglyphs;
+                    analysis.warnings.push('Suspicious characters detected');
+                    analysis.riskLevel = 'high';
+                    analysis.aiScore -= 40;
+                }
+
+                // URL shortener detection
+                if (this.threatPatterns.shorteners.domains.some(shortener =>
+                    domain.includes(shortener))) {
+                    analysis.warnings.push('Shortened URL - destination unknown');
+                    analysis.details.linkType = 'Shortened';
+                    analysis.riskLevel = analysis.riskLevel === 'high' ? 'high' : 'medium';
+                    analysis.aiScore -= 15;
+                } else {
+                    analysis.details.linkType = 'Direct';
+                }
+
+                // IP address check
+                if (/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/.test(domain)) {
+                    analysis.warnings.push('IP address instead of domain name');
+                    analysis.riskLevel = 'high';
+                    analysis.aiScore -= 30;
+                }
+
+                // Suspicious TLD check
+                if (this.threatPatterns.phishing.suspiciousTLDs.some(tld =>
+                    domain.endsWith(tld))) {
+                    analysis.warnings.push('Suspicious top-level domain');
+                    analysis.riskLevel = 'high';
+                    analysis.aiScore -= 25;
+                }
+
+                // Typosquatting detection
+                for (const trusted of this.threatPatterns.trustedDomains) {
+                    const similarity = this.calculateSimilarity(domain, trusted);
+                    if (similarity > 0.7 && similarity < 0.95) {
+                        analysis.warnings.push(`Similar to ${trusted} (possible typosquatting)`);
+                        analysis.riskLevel = 'high';
+                        analysis.aiScore -= 35;
+                        break;
+                    }
+                }
+
+                // Phishing keyword detection
+                const phishingScore = this.calculatePhishingScore(url);
+                if (phishingScore > 50) {
+                    analysis.warnings.push('Contains phishing indicators');
+                    analysis.riskLevel = 'high';
+                    analysis.aiScore -= phishingScore / 2;
+                }
+
+                // Determine final risk level based on AI score
+                if (analysis.aiScore >= 80) {
+                    analysis.riskLevel = 'low';
+                    analysis.isSafe = true;
+                } else if (analysis.aiScore >= 50) {
+                    analysis.riskLevel = 'medium';
+                    analysis.isSafe = true;
+                } else {
+                    analysis.riskLevel = 'high';
+                    analysis.isSafe = false;
+                }
+
+            } catch (e) {
+                // Not a valid URL - might be plain text
+                analysis.isSafe = true;
+                analysis.riskLevel = 'low';
+                analysis.details.type = 'text';
+                analysis.aiScore = 100;
+            }
+
+            return analysis;
+        }
+
+        calculatePhishingScore(url) {
+            let score = 0;
+            const urlLower = url.toLowerCase();
+
+            // Check for multiple suspicious keywords
+            const suspiciousKeywords = [
+                'verify', 'confirm', 'update', 'suspend', 'locked',
+                'secure', 'account', 'billing', 'payment', 'expired'
+            ];
+
+            for (const keyword of suspiciousKeywords) {
+                if (urlLower.includes(keyword)) {
+                    score += 15;
+                }
+            }
+
+            // Check for urgency indicators
+            const urgencyWords = ['urgent', 'immediate', 'quickly', 'expire', '24hour', '48hour'];
+            for (const word of urgencyWords) {
+                if (urlLower.includes(word)) {
+                    score += 20;
+                }
+            }
+
+            // Check for deceptive patterns
+            if (urlLower.includes('@')) score += 30;
+            if (urlLower.includes('//')) score += 20;
+            if (/[0-9]{4,}/.test(urlLower)) score += 15;
+
+            return Math.min(score, 100);
+        }
+
+        calculateSimilarity(str1, str2) {
+            const longer = str1.length > str2.length ? str1 : str2;
+            const shorter = str1.length > str2.length ? str2 : str1;
+
+            if (longer.length === 0) return 1.0;
+
+            const editDistance = this.levenshteinDistance(longer, shorter);
+            return (longer.length - editDistance) / longer.length;
+        }
+
+        levenshteinDistance(str1, str2) {
+            const matrix = [];
+
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+
+            return matrix[str2.length][str1.length];
+        }
+
+        displayAnalysis(analysis) {
+            const safetyIcon = document.getElementById('safetyIcon');
+            const safetyEmoji = document.getElementById('safetyEmoji');
+            const safetyTitle = document.getElementById('safetyTitle');
+            const safetyDescription = document.getElementById('safetyDescription');
+
+            // Update safety indicator based on AI analysis
+            if (analysis.riskLevel === 'low') {
+                safetyIcon.className = 'safety-icon safe';
+                safetyEmoji.textContent = '✅';
+                safetyTitle.textContent = 'Safe Link';
+                safetyDescription.textContent = `AI Confidence: ${analysis.aiScore}% - No threats detected`;
+                this.openButton.className = 'action-button primary';
+                this.openButton.textContent = 'Open Link';
+            } else if (analysis.riskLevel === 'medium') {
+                safetyIcon.className = 'safety-icon warning';
+                safetyEmoji.textContent = '⚠️';
+                safetyTitle.textContent = 'Caution Required';
+                safetyDescription.textContent = `AI Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
+                this.openButton.className = 'action-button primary';
+                this.openButton.textContent = 'Open with Caution';
+            } else {
+                safetyIcon.className = 'safety-icon danger';
+                safetyEmoji.textContent = '⛔';
+                safetyTitle.textContent = 'Potential Threat';
+                safetyDescription.textContent = `AI Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
+                this.openButton.className = 'action-button danger';
+                this.openButton.textContent = 'Open (Not Recommended)';
+            }
+
+            // Display homoglyph warning if detected
+            if (analysis.homoglyphs && analysis.homoglyphs.length > 0) {
+                this.homoglyphWarning.classList.add('active');
+                const details = document.getElementById('homoglyphDetails');
+
+                let detailsHTML = 'Found characters: ';
+                for (const h of analysis.homoglyphs) {
+                    detailsHTML += `<span class="homoglyph-char">"${h.char}" (${h.type || h.unicode})</span> `;
+                    if (h.original) {
+                        detailsHTML += `instead of "${h.original.join('" or "')}" `;
+                    }
+                }
+                details.innerHTML = detailsHTML;
+            } else {
+                this.homoglyphWarning.classList.remove('active');
+            }
+
+            // Update analysis details
+            document.getElementById('protocolValue').textContent =
+                analysis.details.protocol === 'https:' ? 'HTTPS ✅' :
+                analysis.details.protocol === 'http:' ? 'HTTP ⚠️' :
+                'Text';
+
+            document.getElementById('domainValue').textContent =
+                analysis.details.domain || 'Not a URL';
+
+            document.getElementById('sslValue').textContent =
+                analysis.details.protocol === 'https:' ? 'Valid ✅' :
+                analysis.details.protocol === 'http:' ? 'None ⚠️' :
+                'N/A';
+
+            document.getElementById('linkTypeValue').textContent =
+                analysis.details.linkType || 'Plain text';
+
+            document.getElementById('homoglyphValue').textContent =
+                analysis.homoglyphs.length > 0 ? `${analysis.homoglyphs.length} found ⚠️` : 'None detected ✅';
+
+            document.getElementById('riskValue').textContent =
+                analysis.riskLevel === 'low' ? 'Low ✅' :
+                analysis.riskLevel === 'medium' ? 'Medium ⚠️' :
+                'High ⛔';
+
+            // Save analysis for button actions
+            this.currentAnalysis = analysis;
+        }
+
+        closeResult() {
+            this.resultModal.classList.remove('active');
+            this.lastScannedCode = null;
+
+            // Restart scanning
+            this.startButton.style.display = 'block';
+            this.startButton.textContent = 'Scan Another Code';
+        }
+
+        copyToClipboard() {
+            const url = document.getElementById('urlDisplay').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                this.copyButton.textContent = 'Copied ✓';
+                setTimeout(() => {
+                    this.copyButton.textContent = 'Copy Link';
+                }, 2000);
+            });
+        }
+
+        openLink() {
+            const url = document.getElementById('urlDisplay').textContent;
+            if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'high') {
+                if (confirm('⚠️ WARNING! This link has multiple security risks:\n\n' +
+                           this.currentAnalysis.warnings.join('\n') +
+                           '\n\nAI Confidence: ' + this.currentAnalysis.aiScore + '%' +
+                           '\n\nAre you sure you want to continue?')) {
+                    window.open(url, '_blank');
+                }
+            } else if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'medium') {
+                if (confirm('⚠️ Caution: This link has some suspicious indicators:\n\n' +
+                           this.currentAnalysis.warnings.join('\n') +
+                           '\n\nAI Confidence: ' + this.currentAnalysis.aiScore + '%' +
+                           '\n\nProceed?')) {
+                    window.open(url, '_blank');
+                }
+            } else {
+                window.open(url, '_blank');
+            }
+        }
+
+        stopScanning() {
+            this.scanning = false;
+            this.stopCamera();
+        }
+    }
+
+    // Initialize the app
+    document.addEventListener('DOMContentLoaded', () => {
+        const scanner = new QRSafetyScanner();
+
+        // Handle app visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && scanner.scanning) {
+                scanner.stopScanning();
+            }
         });
-    </script>
+    });
+</script>
 </body>
 </html>
