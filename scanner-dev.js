@@ -155,6 +155,16 @@ class QRSafetyScanner {
         for(let i = 0; i < chars.length; i++) {
             const char = chars[i];
 
+            // Skip normal ASCII letters and numbers (don't flag them as homoglyphs)
+            const charCode = char.charCodeAt(0);
+            const isBasicASCII = (charCode >= 48 && charCode <= 57) ||  // 0-9
+                                 (charCode >= 65 && charCode <= 90) ||  // A-Z
+                                 (charCode >= 97 && charCode <= 122);   // a-z
+
+            if (isBasicASCII) {
+                continue; // Skip normal ASCII characters
+            }
+
             if (this.reverseHomoglyphs[char]) {
                 suspicious.push({
                     position: i,
@@ -164,7 +174,6 @@ class QRSafetyScanner {
                 });
             }
 
-            const charCode = char.charCodeAt(0);
             const isCyrillic = (charCode >= 0x0400 && charCode <= 0x04FF);
             const isGreek = (charCode >= 0x0370 && charCode <= 0x03FF);
             const isFullwidth = (charCode >= 0xFF00 && charCode <= 0xFFEF);
@@ -631,38 +640,93 @@ class QRSafetyScanner {
     async tryUrlExpansionAPIs(url) {
         console.log(`Attempting to expand shortened URL: ${url}`);
 
-        // Try unshorten.me first
+        // List of legitimate/trusted shortener services
+        const trustedShorteners = ['bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly'];
+
         try {
-            const response = await fetch(`https://unshorten.me/json/${encodeURIComponent(url)}`, {
-                signal: AbortSignal.timeout(3000)
-            });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.resolved_url && data.resolved_url !== url) {
-                    console.log(`Successfully expanded via unshorten.me: ${data.resolved_url}`);
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname.toLowerCase();
+            const isTrustedShortener = trustedShorteners.some(shortener =>
+                domain.includes(shortener)
+            );
 
-                    // Verify this isn't a security gateway
-                    const securityGateways = ['proofpoint.com', 'barracuda.com', 'mimecast.com'];
-                    const resolvedDomain = new URL(data.resolved_url).hostname.toLowerCase();
-                    const isSecurityGateway = securityGateways.some(gateway =>
-                        resolvedDomain.includes(gateway)
-                    );
-
-                    if (isSecurityGateway) {
-                        console.log(`Ignoring security gateway expansion: ${resolvedDomain}`);
-                        return null;
-                    }
-
-                    return {
-                        from: url,
-                        to: data.resolved_url,
-                        status: 301,
-                        method: 'URL Expansion API'
-                    };
+            // For bit.ly specifically, try their API-less method
+            if (domain.includes('bit.ly')) {
+                try {
+                    // Try to get the expanded URL by following the redirect
+                    // Note: This might fail due to CORS, but worth trying
+                    const response = await fetch(url, {
+                        method: 'HEAD',
+                        mode: 'no-cors', // This won't give us headers but might work for some cases
+                        redirect: 'follow'
+                    });
+                    console.log('Bit.ly HEAD request completed');
+                } catch (e) {
+                    console.log('Direct bit.ly expansion failed:', e.message);
                 }
             }
+
+            // Try unshorten.me first
+            try {
+                const response = await fetch(`https://unshorten.me/json/${encodeURIComponent(url)}`, {
+                    signal: AbortSignal.timeout(5000) // Increase timeout
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.resolved_url && data.resolved_url !== url) {
+                        console.log(`Successfully expanded via unshorten.me: ${data.resolved_url}`);
+
+                        // Verify this isn't a security gateway
+                        const securityGateways = ['proofpoint.com', 'barracuda.com', 'mimecast.com'];
+                        const resolvedDomain = new URL(data.resolved_url).hostname.toLowerCase();
+                        const isSecurityGateway = securityGateways.some(gateway =>
+                            resolvedDomain.includes(gateway)
+                        );
+
+                        if (isSecurityGateway) {
+                            console.log(`Ignoring security gateway expansion: ${resolvedDomain}`);
+                            return null;
+                        }
+
+                        return {
+                            from: url,
+                            to: data.resolved_url,
+                            status: 301,
+                            method: 'URL Expansion API',
+                            isTrustedShortener: isTrustedShortener
+                        };
+                    }
+                }
+            } catch (error) {
+                console.log('Unshorten.me API failed:', error.message);
+            }
+
+            // Try CheckShortURL as backup
+            try {
+                const response = await fetch(`https://checkshorturl.com/expand.php?u=${encodeURIComponent(url)}`, {
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (response.ok) {
+                    const text = await response.text();
+                    // Parse the response to extract the expanded URL
+                    const match = text.match(/href="([^"]+)"/);
+                    if (match && match[1] && match[1] !== url) {
+                        console.log(`Successfully expanded via CheckShortURL: ${match[1]}`);
+                        return {
+                            from: url,
+                            to: match[1],
+                            status: 301,
+                            method: 'CheckShortURL API',
+                            isTrustedShortener: isTrustedShortener
+                        };
+                    }
+                }
+            } catch (error) {
+                console.log('CheckShortURL API failed:', error.message);
+            }
+
         } catch (error) {
-            console.log('URL expansion API failed:', error.message);
+            console.log('URL parsing error:', error.message);
         }
 
         // If we're here, expansion failed or wasn't useful
@@ -1053,18 +1117,48 @@ class QRSafetyScanner {
         if (redirectInfo.warning) {
             const warningDisplay = document.createElement('div');
             warningDisplay.id = 'redirectWarning';
-            warningDisplay.style.cssText = 'margin-top: 15px; padding: 12px; background: rgba(255,149,0,0.1); border: 1px solid #FF9500; border-radius: 10px;';
 
-            let html = '<h4 style="color: #FF9500; margin-bottom: 10px;">⚠️ URL Shortener Detected</h4>';
+            // Check if it's a trusted shortener
+            const trustedShorteners = ['bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly'];
+            const isTrusted = redirectInfo.shortenerDomain &&
+                trustedShorteners.some(shortener =>
+                    redirectInfo.shortenerDomain.includes(shortener)
+                );
+
+            const bgColor = isTrusted ? 'rgba(255,149,0,0.1)' : 'rgba(255,59,48,0.1)';
+            const borderColor = isTrusted ? '#FF9500' : '#FF3B30';
+
+            warningDisplay.style.cssText = `margin-top: 15px; padding: 12px; background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 10px;`;
+
+            let html = `<h4 style="color: ${borderColor}; margin-bottom: 10px;">`;
+            html += isTrusted ? '⚠️ URL Shortener Detected' : '⛔ Unknown Shortener Detected';
+            html += '</h4>';
             html += '<div style="font-size: 13px; color: #8E8E93;">';
             html += `<p><strong>Domain:</strong> ${redirectInfo.shortenerDomain}</p>`;
-            html += '<p style="margin-top: 8px;">This is a shortened URL, but the final destination cannot be verified without visiting the link.</p>';
-            html += '<p style="margin-top: 8px; color: #FF9500;"><strong>Recommendation:</strong> Be extra cautious with shortened URLs as they can hide malicious destinations.</p>';
+
+            if (isTrusted) {
+                html += '<p style="margin-top: 8px;">This is a legitimate URL shortening service, but the final destination cannot be verified without visiting the link.</p>';
+                html += '<p style="margin-top: 8px; color: #FF9500;"><strong>Recommendation:</strong> Only open if you trust the source of this QR code.</p>';
+            } else {
+                html += '<p style="margin-top: 8px;">This is a shortened URL, but the final destination cannot be verified without visiting the link.</p>';
+                html += '<p style="margin-top: 8px; color: #FF3B30;"><strong>Warning:</strong> Be extra cautious with unknown shortened URLs as they can hide malicious destinations.</p>';
+            }
             html += '</div>';
 
             warningDisplay.innerHTML = html;
             const urlDisplay = document.getElementById('urlDisplay');
             urlDisplay.parentElement.insertBefore(warningDisplay, urlDisplay.nextSibling);
+
+            // Don't show the security threats box if it's just the shortener itself
+            const existingSecurityWarning = document.getElementById('redirectSecurityWarning');
+            if (existingSecurityWarning &&
+                redirectInfo.maliciousUrls &&
+                redirectInfo.maliciousUrls.length === 1 &&
+                redirectInfo.maliciousUrls[0].url === redirectInfo.originalUrl) {
+                // Remove the redundant security warning
+                existingSecurityWarning.remove();
+            }
+
             return;
         }
 
@@ -1159,6 +1253,30 @@ class QRSafetyScanner {
     // New method to show security warnings for redirect chain
     showRedirectSecurityWarning(maliciousUrls) {
         if (!maliciousUrls || maliciousUrls.length === 0) return;
+
+        // Don't show redundant warning if it's just about the shortener itself
+        const trustedShorteners = ['bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly'];
+        if (maliciousUrls.length === 1 && maliciousUrls[0].url) {
+            try {
+                const domain = new URL(maliciousUrls[0].url).hostname.toLowerCase();
+                const isTrustedShortener = trustedShorteners.some(shortener =>
+                    domain.includes(shortener)
+                );
+
+                // If the only "malicious" URL is a trusted shortener with just HTTP/shortener issues, skip
+                if (isTrustedShortener &&
+                    maliciousUrls[0].issues &&
+                    maliciousUrls[0].issues.every(issue =>
+                        issue.includes('HTTP') ||
+                        issue.includes('shortener') ||
+                        issue.includes('lookalike'))) {
+                    console.log('Skipping redundant warning for trusted shortener');
+                    return;
+                }
+            } catch (e) {
+                // Continue if URL parsing fails
+            }
+        }
 
         const existingWarning = document.getElementById('redirectSecurityWarning');
         if (existingWarning) {
@@ -1504,11 +1622,24 @@ class QRSafetyScanner {
             const domain = urlObj.hostname.toLowerCase();
             const path = urlObj.pathname.toLowerCase();
 
+            // List of legitimate/trusted shortener services
+            const trustedShorteners = ['bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly', 'short.link'];
+            const isTrustedShortener = trustedShorteners.some(shortener =>
+                domain === shortener || domain.endsWith('.' + shortener)
+            );
+
             analysis.details.protocol = urlObj.protocol;
+
+            // For trusted shorteners, don't penalize HTTP as much
             if (urlObj.protocol !== 'https:') {
-                analysis.warnings.push('Insecure connection (HTTP)');
-                analysis.riskLevel = 'medium';
-                analysis.aiScore -= 20;
+                if (isTrustedShortener) {
+                    analysis.warnings.push('Uses HTTP (consider HTTPS)');
+                    analysis.aiScore -= 10; // Minor penalty for trusted shorteners
+                } else {
+                    analysis.warnings.push('Insecure connection (HTTP)');
+                    analysis.riskLevel = 'medium';
+                    analysis.aiScore -= 20;
+                }
             }
 
             analysis.details.domain = urlObj.hostname;
@@ -1523,10 +1654,17 @@ class QRSafetyScanner {
 
             if (this.threatPatterns.shorteners.domains.some(shortener =>
                 domain.includes(shortener))) {
-                analysis.warnings.push('Shortened URL - destination unknown');
-                analysis.details.linkType = 'Shortened';
-                analysis.riskLevel = analysis.riskLevel === 'high' ? 'high' : 'medium';
-                analysis.aiScore -= 15;
+                if (isTrustedShortener) {
+                    analysis.warnings.push('URL shortener - destination needs verification');
+                    analysis.details.linkType = 'Trusted Shortener';
+                    // Don't change risk level for trusted shorteners
+                    analysis.aiScore -= 10; // Minor penalty
+                } else {
+                    analysis.warnings.push('Shortened URL - destination unknown');
+                    analysis.details.linkType = 'Shortener';
+                    analysis.riskLevel = analysis.riskLevel === 'high' ? 'high' : 'medium';
+                    analysis.aiScore -= 15;
+                }
             } else {
                 analysis.details.linkType = 'Direct';
             }
@@ -1544,13 +1682,16 @@ class QRSafetyScanner {
                 analysis.aiScore -= 25;
             }
 
-            for (const trusted of this.threatPatterns.trustedDomains) {
-                const similarity = this.calculateSimilarity(domain, trusted);
-                if (similarity > 0.7 && similarity < 0.95) {
-                    analysis.warnings.push(`Similar to ${trusted} (possible typosquatting)`);
-                    analysis.riskLevel = 'high';
-                    analysis.aiScore -= 35;
-                    break;
+            // Don't check typosquatting for known legitimate shorteners
+            if (!isTrustedShortener) {
+                for (const trusted of this.threatPatterns.trustedDomains) {
+                    const similarity = this.calculateSimilarity(domain, trusted);
+                    if (similarity > 0.7 && similarity < 0.95) {
+                        analysis.warnings.push(`Similar to ${trusted} (possible typosquatting)`);
+                        analysis.riskLevel = 'high';
+                        analysis.aiScore -= 35;
+                        break;
+                    }
                 }
             }
 
@@ -1573,7 +1714,14 @@ class QRSafetyScanner {
                 analysis.aiScore = 0;
             }
 
-            if (analysis.aiScore >= 80) {
+            // Adjust final risk assessment
+            if (isTrustedShortener && analysis.aiScore >= 70) {
+                // For trusted shorteners with good scores, cap at medium risk
+                if (analysis.riskLevel === 'high' && analysis.homoglyphs.length === 0) {
+                    analysis.riskLevel = 'medium';
+                }
+                analysis.isSafe = true;
+            } else if (analysis.aiScore >= 80) {
                 analysis.riskLevel = 'low';
                 analysis.isSafe = true;
             } else if (analysis.aiScore >= 50) {
@@ -1670,6 +1818,18 @@ class QRSafetyScanner {
         const aiIndicator = analysis.usedRealAI ? ' 🤖' : '';
         const analysisMethod = analysis.usedRealAI ? 'Browser AI Analysis' : 'Pattern Analysis';
 
+        // Check if this is a trusted shortener
+        const trustedShorteners = ['bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly'];
+        let isTrustedShortener = false;
+        try {
+            const domain = new URL(analysis.url).hostname.toLowerCase();
+            isTrustedShortener = trustedShorteners.some(shortener =>
+                domain.includes(shortener)
+            );
+        } catch (e) {
+            // Not a URL
+        }
+
         if (analysis.riskLevel === 'low') {
             safetyIcon.className = 'safety-icon safe';
             safetyEmoji.textContent = '✅';
@@ -1677,13 +1837,23 @@ class QRSafetyScanner {
             safetyDescription.textContent = `${analysisMethod} • Confidence: ${analysis.aiScore}% - No threats detected`;
             this.openButton.className = 'action-button primary';
             this.openButton.textContent = 'Open Link';
+            this.openButton.disabled = false;
         } else if (analysis.riskLevel === 'medium') {
             safetyIcon.className = 'safety-icon warning';
             safetyEmoji.textContent = '⚠️';
-            safetyTitle.textContent = 'Caution Required' + aiIndicator;
-            safetyDescription.textContent = `${analysisMethod} • Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
-            this.openButton.className = 'action-button primary';
-            this.openButton.textContent = 'Open with Caution';
+
+            if (isTrustedShortener && analysis.details.linkType === 'Trusted Shortener') {
+                safetyTitle.textContent = 'URL Shortener' + aiIndicator;
+                safetyDescription.textContent = `${analysisMethod} • Legitimate shortening service - destination unverified`;
+                this.openButton.className = 'action-button primary';
+                this.openButton.textContent = 'Open if Trusted';
+            } else {
+                safetyTitle.textContent = 'Caution Required' + aiIndicator;
+                safetyDescription.textContent = `${analysisMethod} • Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
+                this.openButton.className = 'action-button primary';
+                this.openButton.textContent = 'Open with Caution';
+            }
+            this.openButton.disabled = false;
         } else {
             safetyIcon.className = 'safety-icon danger';
             safetyEmoji.textContent = '⛔';
@@ -1691,6 +1861,10 @@ class QRSafetyScanner {
             safetyDescription.textContent = `${analysisMethod} • Confidence: ${analysis.aiScore}% - ${analysis.warnings.join(', ')}`;
             this.openButton.className = 'action-button danger';
             this.openButton.textContent = 'Open (Not Recommended)';
+            // Don't disable for high risk, let user decide (unless disabled elsewhere)
+            if (!this.openButton.disabled) {
+                this.openButton.disabled = false;
+            }
         }
 
         if (analysis.aiExplanation) {
