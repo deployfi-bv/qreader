@@ -184,11 +184,13 @@ class QRSafetyScanner {
         return suspicious;
     }
 
-    async checkRedirects(url, maxRedirects = 5) {
+    async checkRedirects(url, maxRedirects = 10) {
         const redirectChain = [];
+        const maliciousUrls = [];
         let currentUrl = url;
         let finalUrl = url;
         let error = null;
+        let hasSecurityIssues = false;
 
         try {
             const urlObj = new URL(url);
@@ -196,108 +198,77 @@ class QRSafetyScanner {
             const isKnownShortener = this.threatPatterns.shorteners.domains.some(shortener =>
                 domain.includes(shortener));
 
-            if (!isKnownShortener) {
-                return {
-                    originalUrl: url,
-                    finalUrl: url,
-                    redirectChain: [],
-                    hasRedirects: false,
-                    redirectCount: 0,
-                    error: null
-                };
-            }
-
-            // Try multiple methods to check redirects
+            // Check ALL URLs for redirects, not just shorteners
+            // Use safer HEAD requests with manual redirect handling
             for (let i = 0; i < maxRedirects; i++) {
                 try {
-                    const corsProxy = 'https://corsproxy.io/?';
-                    const proxyUrl = corsProxy + encodeURIComponent(currentUrl);
-
-                    const response = await fetch(proxyUrl, {
-                        method: 'HEAD',
-                        mode: 'cors',
-                        redirect: 'manual',
-                        signal: AbortSignal.timeout(5000)
-                    }).catch(async (err) => {
-                        return await fetch(proxyUrl, {
-                            method: 'GET',
-                            mode: 'cors',
-                            redirect: 'follow',
-                            signal: AbortSignal.timeout(5000)
+                    // First, check if current URL is malicious
+                    const isMalicious = this.checkUrlSafety(currentUrl);
+                    if (!isMalicious.safe) {
+                        maliciousUrls.push({
+                            url: currentUrl,
+                            step: i + 1,
+                            issues: isMalicious.issues
                         });
-                    });
+                        hasSecurityIssues = true;
+                    }
 
-                    if (response.redirected && response.url) {
-                        const redirectTo = response.url.replace(corsProxy, '');
-                        if (redirectTo && redirectTo !== currentUrl) {
-                            redirectChain.push({
-                                from: currentUrl,
-                                to: redirectTo,
-                                status: response.status,
-                                method: 'CORS Proxy'
-                            });
-                            currentUrl = redirectTo;
-                            finalUrl = redirectTo;
-                        } else {
-                            break;
-                        }
-                    } else if (response.headers && response.headers.get('location')) {
-                        const location = response.headers.get('location');
+                    // Try safe redirect detection without executing any code from the target
+                    const redirectInfo = await this.safeRedirectCheck(currentUrl);
+
+                    if (redirectInfo && redirectInfo.redirectUrl && redirectInfo.redirectUrl !== currentUrl) {
                         redirectChain.push({
                             from: currentUrl,
-                            to: location,
-                            status: response.status,
-                            method: 'CORS Proxy'
+                            to: redirectInfo.redirectUrl,
+                            status: redirectInfo.status || 301,
+                            method: redirectInfo.method,
+                            isMalicious: !isMalicious.safe
                         });
-                        currentUrl = location;
-                        finalUrl = location;
+                        currentUrl = redirectInfo.redirectUrl;
+                        finalUrl = redirectInfo.redirectUrl;
                     } else {
+                        // No more redirects found
                         break;
                     }
                 } catch (fetchError) {
-                    console.log('CORS proxy failed, trying alternative methods...');
+                    console.log('Redirect check iteration failed:', fetchError);
+                    error = fetchError.message;
                     break;
                 }
             }
 
-            // Try URL expansion APIs if CORS failed
-            if (redirectChain.length === 0 && isKnownShortener) {
-                try {
-                    const expandResponse = await fetch(`https://unshorten.me/json/${encodeURIComponent(url)}`, {
-                        signal: AbortSignal.timeout(3000)
-                    });
-                    if (expandResponse.ok) {
-                        const data = await expandResponse.json();
-                        if (data.resolved_url && data.resolved_url !== url) {
-                            redirectChain.push({
-                                from: url,
-                                to: data.resolved_url,
-                                status: 301,
-                                method: 'Unshorten.me API'
-                            });
-                            finalUrl = data.resolved_url;
-                        }
-                    }
-                } catch (apiError) {
-                    console.log('Unshorten.me API failed');
-                }
+            // Final safety check on the destination URL
+            const finalCheck = this.checkUrlSafety(finalUrl);
+            if (!finalCheck.safe) {
+                maliciousUrls.push({
+                    url: finalUrl,
+                    step: redirectChain.length + 1,
+                    issues: finalCheck.issues,
+                    isFinal: true
+                });
+                hasSecurityIssues = true;
+            }
 
-                if (redirectChain.length === 0) {
-                    try {
-                        const cleanUrl = encodeURIComponent(url);
-                        const expandResponse = await fetch(`https://api.longurl.org/v1/expand?url=${cleanUrl}`, {
-                            signal: AbortSignal.timeout(3000)
+            // If we couldn't trace redirects but it's a known shortener, try expansion APIs
+            if (redirectChain.length === 0 && isKnownShortener) {
+                const apiResult = await this.tryUrlExpansionAPIs(url);
+                if (apiResult) {
+                    redirectChain.push(apiResult);
+                    finalUrl = apiResult.to;
+
+                    // Check the expanded URL for safety
+                    const expandedCheck = this.checkUrlSafety(finalUrl);
+                    if (!expandedCheck.safe) {
+                        maliciousUrls.push({
+                            url: finalUrl,
+                            step: 2,
+                            issues: expandedCheck.issues,
+                            isFinal: true
                         });
-                        if (expandResponse.ok) {
-                            const data = await expandResponse.json();
-                            if (data.long_url && data.long_url !== url) {
-                                redirectChain.push({
-                                    from: url,
-                                    to: data.long_url,
-                                    status: 301,
-                                    method: 'LongURL API'
-                                });
-                                finalUrl = data.long_url;
+                        hasSecurityIssues = true;
+                    }
+                }
+            }
                             }
                         }
                     } catch (apiError) {
@@ -334,8 +305,287 @@ class QRSafetyScanner {
             redirectChain: redirectChain,
             hasRedirects: redirectChain.length > 0,
             redirectCount: redirectChain.length,
-            error: error
+            maliciousUrls: maliciousUrls,
+            hasSecurityIssues: hasSecurityIssues,
+            error: error,
+            shortenerDomain: isKnownShortener ? domain : null,
+            warning: isKnownShortener && redirectChain.length === 0 ?
+                'URL shortener detected but unable to trace redirects' : null
         };
+    }
+
+    // Safe redirect checking without executing any code from target pages
+    async safeRedirectCheck(url) {
+        try {
+            // Try using a safe CORS proxy with HEAD request only
+            const corsProxies = [
+                'https://corsproxy.io/?',
+                'https://api.allorigins.win/raw?url=',
+                'https://cors-anywhere.herokuapp.com/'
+            ];
+
+            for (const proxy of corsProxies) {
+                try {
+                    const proxyUrl = proxy + encodeURIComponent(url);
+                    const response = await fetch(proxyUrl, {
+                        method: 'HEAD',
+                        mode: 'cors',
+                        redirect: 'manual',
+                        signal: AbortSignal.timeout(3000),
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    // Check for redirect headers
+                    const location = response.headers.get('location') ||
+                                   response.headers.get('Location') ||
+                                   response.headers.get('x-final-url');
+
+                    if (location && location !== url) {
+                        // Make sure it's an absolute URL
+                        const redirectUrl = new URL(location, url).href;
+                        return {
+                            redirectUrl: redirectUrl,
+                            status: response.status,
+                            method: 'HTTP Redirect'
+                        };
+                    }
+
+                    // If response is successful but no redirect header, try to detect meta refresh
+                    if (response.status === 200) {
+                        // For meta refresh detection, we need a minimal GET request
+                        // but we'll limit the response size for safety
+                        const textResponse = await fetch(proxyUrl, {
+                            method: 'GET',
+                            mode: 'cors',
+                            signal: AbortSignal.timeout(3000),
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Range': 'bytes=0-5000' // Only fetch first 5KB
+                            }
+                        });
+
+                        const textContent = await textResponse.text();
+                        const metaRefresh = this.detectMetaRefresh(textContent);
+                        if (metaRefresh) {
+                            return {
+                                redirectUrl: new URL(metaRefresh, url).href,
+                                status: 200,
+                                method: 'Meta Refresh'
+                            };
+                        }
+                    }
+
+                    break; // If we got a response, don't try other proxies
+                } catch (proxyError) {
+                    console.log(`Proxy ${proxy} failed:`, proxyError.message);
+                    continue; // Try next proxy
+                }
+            }
+        } catch (error) {
+            console.log('Safe redirect check failed:', error);
+        }
+
+        return null;
+    }
+
+    // Detect meta refresh redirects in HTML without executing JavaScript
+    detectMetaRefresh(htmlContent) {
+        try {
+            // Only check the first 5KB to avoid processing large pages
+            const snippet = htmlContent.substring(0, 5000);
+
+            // Look for meta refresh tag
+            const metaRefreshPattern = /<meta[^>]*http-equiv\s*=\s*["']refresh["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i;
+            const match = snippet.match(metaRefreshPattern);
+
+            if (match) {
+                // Parse the content attribute (e.g., "0; url=http://example.com")
+                const content = match[1];
+                const urlMatch = content.match(/url\s*=\s*(.+)/i);
+                if (urlMatch) {
+                    return urlMatch[1].trim();
+                }
+            }
+
+            // Also check for JavaScript redirects (common patterns only, without executing)
+            const jsRedirectPatterns = [
+                /window\.location\s*=\s*["']([^"']+)["']/,
+                /window\.location\.href\s*=\s*["']([^"']+)["']/,
+                /window\.location\.replace\s*\(\s*["']([^"']+)["']\s*\)/,
+                /location\.href\s*=\s*["']([^"']+)["']/
+            ];
+
+            for (const pattern of jsRedirectPatterns) {
+                const jsMatch = snippet.match(pattern);
+                if (jsMatch) {
+                    return jsMatch[1];
+                }
+            }
+        } catch (error) {
+            console.log('Meta refresh detection error:', error);
+        }
+
+        return null;
+    }
+
+    // Check if a URL is malicious based on various criteria
+    checkUrlSafety(url) {
+        const issues = [];
+        let safe = true;
+
+        try {
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname.toLowerCase();
+            const path = urlObj.pathname.toLowerCase();
+
+            // Check against known phishing domains
+            if (this.threatDatabase && this.threatDatabase.knownPhishing) {
+                if (this.threatDatabase.knownPhishing.some(phish => domain.includes(phish))) {
+                    issues.push('Known phishing domain');
+                    safe = false;
+                }
+            }
+
+            // Check for suspicious patterns
+            if (domain.includes('@')) {
+                issues.push('Contains @ symbol (potential deception)');
+                safe = false;
+            }
+
+            // Check for IP addresses instead of domains
+            const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (ipPattern.test(domain)) {
+                issues.push('IP address instead of domain name');
+                safe = false;
+            }
+
+            // Check for suspicious TLDs
+            const suspiciousTLDs = ['.tk', '.ml', '.ga', '.cf', '.click', '.download', '.review'];
+            if (suspiciousTLDs.some(tld => domain.endsWith(tld))) {
+                issues.push('Suspicious top-level domain');
+                safe = false;
+            }
+
+            // Check for homoglyphs
+            const homoglyphsFound = this.detectHomoglyphs(domain);
+            if (homoglyphsFound.length > 0) {
+                issues.push(`Contains lookalike characters (${homoglyphsFound.length} found)`);
+                safe = false;
+            }
+
+            // Check for typosquatting
+            const typosquatCheck = this.checkTyposquatting(domain);
+            if (typosquatCheck.isTyposquatting) {
+                issues.push(`Possible typosquatting of ${typosquatCheck.similarTo}`);
+                safe = false;
+            }
+
+            // Check for suspicious keywords in path
+            const suspiciousKeywords = [
+                'verify', 'confirm', 'update', 'suspend', 'locked',
+                'secure', 'account', 'billing', 'payment', 'expired',
+                'refund', 'alert', 'urgent', 'immediate'
+            ];
+
+            for (const keyword of suspiciousKeywords) {
+                if (path.includes(keyword) || domain.includes(keyword)) {
+                    issues.push(`Contains suspicious keyword: ${keyword}`);
+                    if (!this.isTrustedDomain(domain)) {
+                        safe = false;
+                    }
+                }
+            }
+
+            // Check protocol
+            if (urlObj.protocol === 'http:') {
+                issues.push('Uses insecure HTTP protocol');
+                // Not marking as unsafe, just a warning
+            }
+
+            // Check for data URIs
+            if (urlObj.protocol === 'data:') {
+                issues.push('Data URI detected');
+                safe = false;
+            }
+
+            // Check for JavaScript URIs
+            if (urlObj.protocol === 'javascript:') {
+                issues.push('JavaScript URI detected - HIGH RISK');
+                safe = false;
+            }
+
+        } catch (error) {
+            issues.push('Invalid URL format');
+            safe = false;
+        }
+
+        return {
+            safe: safe,
+            issues: issues
+        };
+    }
+
+    // Check if domain is in trusted list
+    isTrustedDomain(domain) {
+        if (!this.threatPatterns || !this.threatPatterns.trustedDomains) {
+            return false;
+        }
+
+        return this.threatPatterns.trustedDomains.some(trusted =>
+            domain === trusted || domain.endsWith('.' + trusted)
+        );
+    }
+
+    // Check for typosquatting
+    checkTyposquatting(domain) {
+        const popularDomains = [
+            'google.com', 'facebook.com', 'amazon.com', 'apple.com',
+            'microsoft.com', 'twitter.com', 'instagram.com', 'linkedin.com',
+            'youtube.com', 'netflix.com', 'paypal.com', 'ebay.com',
+            'reddit.com', 'wikipedia.org', 'yahoo.com', 'github.com'
+        ];
+
+        for (const popularDomain of popularDomains) {
+            const similarity = this.calculateSimilarity(domain, popularDomain);
+            if (similarity > 0.8 && similarity < 1.0) {
+                return {
+                    isTyposquatting: true,
+                    similarTo: popularDomain,
+                    similarity: similarity
+                };
+            }
+        }
+
+        return {
+            isTyposquatting: false
+        };
+    }
+
+    // Try URL expansion APIs as fallback
+    async tryUrlExpansionAPIs(url) {
+        // Try unshorten.me
+        try {
+            const response = await fetch(`https://unshorten.me/json/${encodeURIComponent(url)}`, {
+                signal: AbortSignal.timeout(3000)
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.resolved_url && data.resolved_url !== url) {
+                    return {
+                        from: url,
+                        to: data.resolved_url,
+                        status: 301,
+                        method: 'URL Expansion API'
+                    };
+                }
+            }
+        } catch (error) {
+            console.log('URL expansion API failed:', error);
+        }
+
+        return null;
     }
 
     async checkBrowserAI() {
@@ -630,28 +880,35 @@ class QRSafetyScanner {
         this.analyzeURL(data);
         this.checkExternalServices(data);
 
-        // Check for redirects if it's a URL
+        // Check for redirects for ALL URLs, not just shorteners
         try {
             const urlObj = new URL(data);
-            const domain = urlObj.hostname.toLowerCase();
-            const isShortener = this.threatPatterns.shorteners.domains.some(shortener =>
-                domain.includes(shortener));
 
-            if (isShortener || domain.length < 15) {
-                this.showRedirectStatus('checking');
-                this.checkRedirects(data).then(redirectInfo => {
+            // Always check for redirects
+            this.showRedirectStatus('checking');
+            this.checkRedirects(data).then(redirectInfo => {
+                // Display redirect information if any
+                if (redirectInfo.hasRedirects || redirectInfo.warning || redirectInfo.hasSecurityIssues) {
                     this.displayRedirectInfo(redirectInfo);
-                    if (redirectInfo.finalUrl !== data) {
-                        this.analyzeURL(redirectInfo.finalUrl, redirectInfo);
-                        this.checkExternalServices(redirectInfo.finalUrl);
-                    }
-                }).catch(error => {
-                    console.error('Redirect check failed:', error);
-                    this.showRedirectStatus('failed');
-                });
-            }
+                }
+
+                // If there's a different final URL, analyze it too
+                if (redirectInfo.finalUrl !== data) {
+                    this.analyzeURL(redirectInfo.finalUrl, redirectInfo);
+                    this.checkExternalServices(redirectInfo.finalUrl);
+                }
+
+                // Show security warnings if malicious URLs found in chain
+                if (redirectInfo.hasSecurityIssues) {
+                    this.showRedirectSecurityWarning(redirectInfo.maliciousUrls);
+                }
+            }).catch(error => {
+                console.error('Redirect check failed:', error);
+                this.showRedirectStatus('failed');
+            });
         } catch (e) {
             // Not a valid URL, skip redirect checking
+            console.log('Not a valid URL for redirect checking:', e);
         }
     }
 
@@ -697,14 +954,29 @@ class QRSafetyScanner {
         }
 
         if (!redirectInfo.hasRedirects) {
+            // Even if no redirects, show if security issues were found
+            if (redirectInfo.hasSecurityIssues) {
+                this.showRedirectSecurityWarning(redirectInfo.maliciousUrls);
+            }
             return;
         }
 
         const redirectDisplay = document.createElement('div');
         redirectDisplay.id = 'redirectChain';
-        redirectDisplay.style.cssText = 'margin-top: 15px; padding: 12px; background: rgba(175,82,222,0.1); border: 1px solid #AF52DE; border-radius: 10px;';
 
-        let html = '<h4 style="color: #AF52DE; margin-bottom: 10px;">🔀 Redirect Chain Detected</h4>';
+        // Change color based on security status
+        const borderColor = redirectInfo.hasSecurityIssues ? '#FF3B30' : '#AF52DE';
+        const bgColor = redirectInfo.hasSecurityIssues ? 'rgba(255,59,48,0.1)' : 'rgba(175,82,222,0.1)';
+
+        redirectDisplay.style.cssText = `margin-top: 15px; padding: 12px; background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 10px;`;
+
+        let html = `<h4 style="color: ${borderColor}; margin-bottom: 10px;">`;
+        if (redirectInfo.hasSecurityIssues) {
+            html += '⛔ Dangerous Redirect Chain Detected';
+        } else {
+            html += '🔀 Redirect Chain Detected';
+        }
+        html += '</h4>';
         html += '<div style="font-size: 13px; color: #8E8E93;">';
 
         if (redirectInfo.error && redirectInfo.redirectChain.length === 0) {
@@ -715,20 +987,49 @@ class QRSafetyScanner {
             html += `<p>This URL redirects through ${redirectInfo.redirectCount} step(s):</p>`;
             html += '<div style="margin-top: 10px; font-family: monospace; font-size: 12px;">';
 
-            html += `<div style="padding: 4px 0; color: #5AC8FA;">1. ${this.truncateUrl(redirectInfo.originalUrl)}</div>`;
+            // Show original URL with safety indicator
+            const originalSafe = !redirectInfo.maliciousUrls.some(m => m.url === redirectInfo.originalUrl);
+            const originalColor = originalSafe ? '#5AC8FA' : '#FF3B30';
+            const originalIcon = originalSafe ? '' : ' ⚠️';
+            html += `<div style="padding: 4px 0; color: ${originalColor};">1. ${this.truncateUrl(redirectInfo.originalUrl)}${originalIcon}</div>`;
+
+            // Show each redirect in the chain
             redirectInfo.redirectChain.forEach((redirect, index) => {
                 const methodInfo = redirect.method ? ` (via ${redirect.method})` : '';
+                const isMalicious = redirect.isMalicious ||
+                                  redirectInfo.maliciousUrls.some(m => m.url === redirect.to);
+                const stepColor = isMalicious ? '#FF3B30' : '#5AC8FA';
+                const stepIcon = isMalicious ? ' ⛔' : '';
+
                 html += `<div style="padding: 4px 0; padding-left: 20px; color: #666;">↓${methodInfo}</div>`;
-                html += `<div style="padding: 4px 0; color: #5AC8FA;">${index + 2}. ${this.truncateUrl(redirect.to)}</div>`;
+                html += `<div style="padding: 4px 0; color: ${stepColor};">${index + 2}. ${this.truncateUrl(redirect.to)}${stepIcon}</div>`;
+
+                // Show security issues for this step
+                if (isMalicious) {
+                    const maliciousInfo = redirectInfo.maliciousUrls.find(m => m.url === redirect.to);
+                    if (maliciousInfo && maliciousInfo.issues) {
+                        html += `<div style="padding: 2px 0 4px 20px; color: #FF3B30; font-size: 11px;">`;
+                        html += `⚠️ ${maliciousInfo.issues.join(', ')}`;
+                        html += `</div>`;
+                    }
+                }
             });
 
             html += '</div>';
             html += `<p style="margin-top: 10px;"><strong>Final destination:</strong></p>`;
-            html += `<div style="word-break: break-all; color: #5AC8FA; font-family: monospace; font-size: 12px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; margin-top: 5px;">${redirectInfo.finalUrl}</div>`;
 
-            if (redirectInfo.redirectCount > 2) {
-                html += '<p style="margin-top: 10px; padding: 8px; background: rgba(255,59,48,0.1); border-radius: 6px; color: #FF3B30;">';
-                html += '⚠️ <strong>High Risk:</strong> Multiple redirects detected. This is often used to evade detection.';
+            const finalSafe = !redirectInfo.maliciousUrls.some(m => m.isFinal);
+            const finalColor = finalSafe ? '#5AC8FA' : '#FF3B30';
+            html += `<div style="word-break: break-all; color: ${finalColor}; font-family: monospace; font-size: 12px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; margin-top: 5px;">${redirectInfo.finalUrl}</div>`;
+
+            // Show warnings based on redirect count and security issues
+            if (redirectInfo.hasSecurityIssues) {
+                html += '<p style="margin-top: 10px; padding: 8px; background: rgba(255,59,48,0.2); border-radius: 6px; color: #FF3B30;">';
+                html += '⛔ <strong>DANGER:</strong> Malicious URLs detected in redirect chain. DO NOT visit this link!';
+                html += '</p>';
+            } else if (redirectInfo.redirectCount > 2) {
+                html += '<p style="margin-top: 10px; padding: 8px; background: rgba(255,149,0,0.1); border-radius: 6px; color: #FF9500;">';
+                html += '⚠️ <strong>Warning:</strong> Multiple redirects detected. This is often used to evade detection.';
                 html += '</p>';
             }
         }
@@ -740,9 +1041,67 @@ class QRSafetyScanner {
         urlDisplay.parentElement.insertBefore(redirectDisplay, urlDisplay.nextSibling);
     }
 
-    truncateUrl(url) {
-        if (url.length > 40) {
-            return url.substring(0, 37) + '...';
+    // New method to show security warnings for redirect chain
+    showRedirectSecurityWarning(maliciousUrls) {
+        if (!maliciousUrls || maliciousUrls.length === 0) return;
+
+        const existingWarning = document.getElementById('redirectSecurityWarning');
+        if (existingWarning) {
+            existingWarning.remove();
+        }
+
+        const warningDisplay = document.createElement('div');
+        warningDisplay.id = 'redirectSecurityWarning';
+        warningDisplay.style.cssText = 'margin-top: 15px; padding: 12px; background: rgba(255,59,48,0.15); border: 2px solid #FF3B30; border-radius: 10px;';
+
+        let html = '<h4 style="color: #FF3B30; margin-bottom: 10px;">⛔ Security Threats Detected</h4>';
+        html += '<div style="font-size: 13px;">';
+
+        maliciousUrls.forEach((malicious, index) => {
+            html += `<div style="margin-bottom: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">`;
+            if (malicious.isFinal) {
+                html += `<strong style="color: #FF3B30;">Final Destination:</strong><br>`;
+            } else {
+                html += `<strong style="color: #FF3B30;">Step ${malicious.step}:</strong><br>`;
+            }
+            html += `<span style="word-break: break-all; font-family: monospace; font-size: 11px; color: #FF9500;">${this.truncateUrl(malicious.url, 50)}</span><br>`;
+            html += `<strong style="color: #FF3B30;">Issues:</strong> ${malicious.issues.join(' • ')}`;
+            html += `</div>`;
+        });
+
+        html += '<p style="margin-top: 10px; padding: 10px; background: rgba(255,59,48,0.2); border-radius: 6px; color: #FFF; text-align: center;">';
+        html += '<strong>⛔ DO NOT OPEN THIS LINK ⛔</strong><br>';
+        html += '<span style="font-size: 12px;">This QR code leads to potentially dangerous websites</span>';
+        html += '</p>';
+        html += '</div>';
+
+        warningDisplay.innerHTML = html;
+
+        // Insert after the safety indicator
+        const safetyIndicator = document.getElementById('safetyIndicator');
+        safetyIndicator.parentElement.insertBefore(warningDisplay, safetyIndicator.nextSibling);
+
+        // Also update the main safety indicator to show danger
+        const safetyIcon = document.getElementById('safetyIcon');
+        const safetyEmoji = document.getElementById('safetyEmoji');
+        const safetyTitle = document.getElementById('safetyTitle');
+        const safetyDescription = document.getElementById('safetyDescription');
+
+        safetyIcon.className = 'safety-icon danger';
+        safetyEmoji.textContent = '⛔';
+        safetyTitle.textContent = 'Dangerous Link Detected';
+        safetyDescription.textContent = 'Multiple security threats found in redirect chain';
+
+        // Update the open button to show danger
+        this.openButton.className = 'action-button danger';
+        this.openButton.textContent = 'DO NOT OPEN';
+        this.openButton.disabled = true;
+    }
+
+    truncateUrl(url, maxLength = 40) {
+        if (!url) return '';
+        if (url.length > maxLength) {
+            return url.substring(0, maxLength - 3) + '...';
         }
         return url;
     }
