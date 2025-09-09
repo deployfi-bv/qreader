@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>AI QR Safety Scanner Pro</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-container">
+    <div class="header">
+        <h1>AI QR Safety Scanner</h1>
+        <div class="header-buttons">
+            <div class="ai-status" id="aiStatus" style="display: none;">
+                <span class="ai-indicator">🤖</span>
+                <span class="ai-text">AI</span>
+            </div>
+            <button class="help-button" id="helpButton">?</button>
+        </div>
+    </div>
+
+    <div class="scanner-container">
+        <video id="video" playsinline></video>
+        <canvas id="canvas"></canvas>
+
+        <div class="scanner-overlay">
+            <div class="scanner-frame">
+                <div class="corner-bl"></div>
+                <div class="corner-br"></div>
+                <div class="scan-line"></div>
+            </div>
+        </div>
+
+        <div class="loading-spinner"></div>
+
+        <button class="start-button" id="startButton">Start Scanning</button>
+
+        <div class="permission-screen" id="permissionScreen" style="display: none;">
+            <div class="permission-icon">📷</div>
+            <div class="permission-title">Camera Access Required</div>
+            <div class="permission-text">
+                To scan QR codes, this app needs access to your device's camera
+            </div>
+            <button class="start-button" id="grantPermission">Grant Access</button>
+        </div>
+    </div>
+
+    <div class="result-modal" id="resultModal">
+        <button class="close-button" id="closeModal">✕</button>
+        <div class="modal-handle"></div>
+
+        <div class="safety-indicator" id="safetyIndicator">
+            <div class="safety-icon" id="safetyIcon">
+                <span id="safetyEmoji">🔍</span>
+            </div>
+            <div class="safety-text">
+                <h3 id="safetyTitle">Analyzing Safety</h3>
+                <p id="safetyDescription">Checking link...</p>
+            </div>
+        </div>
+
+        <div class="url-display" id="urlDisplay"></div>
+
+        <div class="homoglyph-warning" id="homoglyphWarning">
+            <h4>⚠️ Suspicious Characters Detected</h4>
+            <div class="homoglyph-details" id="homoglyphDetails"></div>
+        </div>
+
+        <div class="external-checks" id="externalChecks">
+            <h4>Security Checks</h4>
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon virustotal">VT</div>
+                    <span>VirusTotal</span>
+                </div>
+                <div class="check-status" id="virustotalStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+            <div class="check-detalis" id="virustotalDetails" style="display:none"></div>
+
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon google">G</div>
+                    <span>Google Safe Browsing</span>
+                </div>
+                <div class="check-status" id="googleStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+            <div class="check-detalis" id="googleDetails" style="display:none"></div>
+
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon phishtank">PT</div>
+                    <span>PhishTank</span>
+                </div>
+                <div class="check-status" id="phishtankStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+            <div class="check-detalis" id="phishtankDetails" style="display:none"></div>
+
+            <div class="check-item">
+                <div class="check-service">
+                    <div class="service-icon urlvoid">UV</div>
+                    <span>URLVoid</span>
+                </div>
+                <div class="check-status" id="urlvoidStatus">
+                    <div class="status-loading"></div>
+                </div>
+            </div>
+            <div class="check-detalis" id="urlvoidDetails" style="display:none"></div>
+        </div>
+
+        <div class="analysis-details">
+            <div class="analysis-item">
+                <span class="analysis-label">Protocol</span>
+                <span class="analysis-value" id="protocolValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Domain</span>
+                <span class="analysis-value" id="domainValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">SSL Certificate</span>
+                <span class="analysis-value" id="sslValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Link Type</span>
+                <span class="analysis-value" id="linkTypeValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Homoglyphs</span>
+                <span class="analysis-value" id="homoglyphValue">-</span>
+            </div>
+            <div class="analysis-item">
+                <span class="analysis-label">Risk Level</span>
+                <span class="analysis-value" id="riskValue">-</span>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="action-buttons-container" style="transform: translateY(100%);">
+        <div class="action-buttons">
+            <button class="action-button secondary" id="copyButton">Copy Link</button>
+            <button class="action-button primary" id="openButton">Open Link</button>
+        </div>
+    </div>
+</div>
+
+<div class="help-modal" id="helpModal">
+    <div class="help-content">
+        <div class="help-header">
+            <h2>User Guide</h2>
+            <button class="close-button" id="closeHelp">✕</button>
+        </div>
+
+        <div class="help-section">
+            <h3>📱 How to Use</h3>
+            <p>1. Tap "Start Scanning" to activate your camera</p>
+            <p>2. Point your camera at any QR code</p>
+            <p>3. The app will automatically detect and analyze the code</p>
+            <p>4. Review the safety analysis before opening any links</p>
+        </div>
+
+        <div class="help-section">
+            <h3>🛡️ Safety Indicators</h3>
+            <ul>
+                <li><span class="status-badge safe">✅ Safe</span> - No threats detected</li>
+                <li><span class="status-badge warning">⚠️ Warning</span> - Potential risks found</li>
+                <li><span class="status-badge danger">⛔ Danger</span> - High risk detected</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>🔍 AI Analysis Features</h3>
+            <ul>
+                <li>Homoglyph detection (lookalike characters)</li>
+                <li>Phishing domain detection</li>
+                <li>SSL certificate verification</li>
+                <li>URL shortener detection</li>
+                <li>Typosquatting detection</li>
+                <li>Multi-service security checks</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>⚡ Quick Tips</h3>
+            <ul>
+                <li>Always check the risk level before opening links</li>
+                <li>Be extra cautious with shortened URLs</li>
+                <li>Look for HTTPS protocol for secure connections</li>
+                <li>Watch for suspicious characters in domains</li>
+                <li>When in doubt, don't open the link</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>🤖 Browser AI Integration</h3>
+            <p>This scanner can use your browser's built-in AI for enhanced analysis when available.</p>
+            <p><strong>To enable Chrome AI (Gemini Nano):</strong></p>
+            <ul>
+                <li>Use Chrome Canary or Dev version 127+</li>
+                <li>Go to: chrome://flags/#optimization-guide-on-device-model</li>
+                <li>Enable "Optimization guide on device model"</li>
+                <li>Go to: chrome://flags/#prompt-api-for-gemini-nano</li>
+                <li>Enable "Prompt API for Gemini Nano"</li>
+                <li>Restart Chrome</li>
+            </ul>
+            <p>When active, a green 🤖 AI indicator appears in the header.</p>
+        </div>
+
+        <div class="help-section">
+            <h3>🔒 Privacy</h3>
+            <p>This app processes all data locally on your device. When browser AI is available, analysis happens entirely offline using your browser's built-in AI model. No QR codes or URLs are sent to external servers.</p>
+        </div>
+    </div>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/gh/cozmo/jsQR/dist/jsQR.js"></script>
+<script src="scanner.js"></script>
+</body>
+</html>
