@@ -314,6 +314,20 @@ class QRSafetyScanner {
     // Safe redirect checking without executing any code from target pages
     async safeRedirectCheck(url) {
         try {
+            // List of known security gateways and filters to ignore
+            const securityGateways = [
+                'proofpoint.com',
+                'barracuda.com',
+                'mimecast.com',
+                'forcepoint.com',
+                'zscaler.net',
+                'umbrella.cisco.com',
+                'safebrowsing.google.com',
+                'fortinet.com',
+                'sophos.com',
+                'checkpoint.com'
+            ];
+
             // Try using a safe CORS proxy with HEAD request only
             const corsProxies = [
                 'https://corsproxy.io/?',
@@ -340,13 +354,38 @@ class QRSafetyScanner {
                                    response.headers.get('x-final-url');
 
                     if (location && location !== url) {
-                        // Make sure it's an absolute URL
-                        const redirectUrl = new URL(location, url).href;
-                        return {
-                            redirectUrl: redirectUrl,
-                            status: response.status,
-                            method: 'HTTP Redirect'
-                        };
+                        // Check if this is a security gateway redirect (false positive)
+                        try {
+                            const redirectUrl = new URL(location, url).href;
+                            const redirectDomain = new URL(redirectUrl).hostname.toLowerCase();
+
+                            // Skip if this is a known security gateway
+                            const isSecurityGateway = securityGateways.some(gateway =>
+                                redirectDomain.includes(gateway)
+                            );
+
+                            if (isSecurityGateway) {
+                                console.log(`Ignoring security gateway redirect to: ${redirectDomain}`);
+                                continue; // Try next proxy or return null
+                            }
+
+                            // Also skip if it's redirecting to the proxy itself
+                            if (redirectUrl.includes('corsproxy.io') ||
+                                redirectUrl.includes('allorigins.win') ||
+                                redirectUrl.includes('cors-anywhere')) {
+                                console.log(`Ignoring proxy redirect: ${redirectUrl}`);
+                                continue;
+                            }
+
+                            return {
+                                redirectUrl: redirectUrl,
+                                status: response.status,
+                                method: 'HTTP Redirect'
+                            };
+                        } catch (urlError) {
+                            console.log('Invalid redirect URL:', location);
+                            continue;
+                        }
                     }
 
                     // If response is successful but no redirect header, try to detect meta refresh
@@ -364,17 +403,45 @@ class QRSafetyScanner {
                         });
 
                         const textContent = await textResponse.text();
+
+                        // Check if this is a security gateway interception page
+                        const lowerContent = textContent.toLowerCase();
+                        const isSecurityPage = securityGateways.some(gateway =>
+                            lowerContent.includes(gateway)
+                        );
+
+                        if (isSecurityPage) {
+                            console.log('Detected security gateway interception page, skipping');
+                            continue;
+                        }
+
                         const metaRefresh = this.detectMetaRefresh(textContent);
                         if (metaRefresh) {
-                            return {
-                                redirectUrl: new URL(metaRefresh, url).href,
-                                status: 200,
-                                method: 'Meta Refresh'
-                            };
+                            try {
+                                const metaUrl = new URL(metaRefresh, url).href;
+                                const metaDomain = new URL(metaUrl).hostname.toLowerCase();
+
+                                // Skip security gateway meta refreshes
+                                const isSecurityRedirect = securityGateways.some(gateway =>
+                                    metaDomain.includes(gateway)
+                                );
+
+                                if (!isSecurityRedirect) {
+                                    return {
+                                        redirectUrl: metaUrl,
+                                        status: 200,
+                                        method: 'Meta Refresh'
+                                    };
+                                }
+                            } catch (urlError) {
+                                console.log('Invalid meta refresh URL:', metaRefresh);
+                            }
                         }
                     }
 
-                    break; // If we got a response, don't try other proxies
+                    // If we got here without detecting redirects, assume no redirect
+                    return null;
+
                 } catch (proxyError) {
                     console.log(`Proxy ${proxy} failed:`, proxyError.message);
                     continue; // Try next proxy
@@ -562,7 +629,9 @@ class QRSafetyScanner {
 
     // Try URL expansion APIs as fallback
     async tryUrlExpansionAPIs(url) {
-        // Try unshorten.me
+        console.log(`Attempting to expand shortened URL: ${url}`);
+
+        // Try unshorten.me first
         try {
             const response = await fetch(`https://unshorten.me/json/${encodeURIComponent(url)}`, {
                 signal: AbortSignal.timeout(3000)
@@ -570,6 +639,20 @@ class QRSafetyScanner {
             if (response.ok) {
                 const data = await response.json();
                 if (data.resolved_url && data.resolved_url !== url) {
+                    console.log(`Successfully expanded via unshorten.me: ${data.resolved_url}`);
+
+                    // Verify this isn't a security gateway
+                    const securityGateways = ['proofpoint.com', 'barracuda.com', 'mimecast.com'];
+                    const resolvedDomain = new URL(data.resolved_url).hostname.toLowerCase();
+                    const isSecurityGateway = securityGateways.some(gateway =>
+                        resolvedDomain.includes(gateway)
+                    );
+
+                    if (isSecurityGateway) {
+                        console.log(`Ignoring security gateway expansion: ${resolvedDomain}`);
+                        return null;
+                    }
+
                     return {
                         from: url,
                         to: data.resolved_url,
@@ -579,9 +662,11 @@ class QRSafetyScanner {
                 }
             }
         } catch (error) {
-            console.log('URL expansion API failed:', error);
+            console.log('URL expansion API failed:', error.message);
         }
 
+        // If we're here, expansion failed or wasn't useful
+        console.log('Could not expand shortened URL through API services');
         return null;
     }
 
@@ -878,40 +963,67 @@ class QRSafetyScanner {
         this.checkExternalServices(data);
 
         // Check for redirects for ALL URLs, not just shorteners
-        try {
-            const urlObj = new URL(data);
+        // You can disable redirect checking by setting this to false if experiencing false positives
+        const enableRedirectCheck = true; // Set to false to disable redirect checking
 
-            // Always check for redirects
-            this.showRedirectStatus('checking');
-            this.checkRedirects(data).then(redirectInfo => {
-                // Display redirect information if any
-                if (redirectInfo.hasRedirects || redirectInfo.warning || redirectInfo.hasSecurityIssues) {
-                    this.displayRedirectInfo(redirectInfo);
-                }
+        if (enableRedirectCheck) {
+            try {
+                const urlObj = new URL(data);
 
-                // If there's a different final URL, analyze it too
-                if (redirectInfo.finalUrl !== data) {
-                    this.analyzeURL(redirectInfo.finalUrl, redirectInfo);
-                    this.checkExternalServices(redirectInfo.finalUrl);
-                }
+                // Always check for redirects
+                this.showRedirectStatus('checking');
+                this.checkRedirects(data).then(redirectInfo => {
+                    // Only show redirect info if actual redirects were found (not false positives)
+                    if (redirectInfo.hasRedirects && redirectInfo.redirectChain.length > 0) {
+                        console.log('Redirect chain detected:', redirectInfo.redirectChain);
+                        this.displayRedirectInfo(redirectInfo);
 
-                // Show security warnings if malicious URLs found in chain
-                if (redirectInfo.hasSecurityIssues) {
-                    this.showRedirectSecurityWarning(redirectInfo.maliciousUrls);
-                }
-            }).catch(error => {
-                console.error('Redirect check failed:', error);
-                this.showRedirectStatus('failed');
-            });
-        } catch (e) {
-            // Not a valid URL, skip redirect checking
-            console.log('Not a valid URL for redirect checking:', e);
+                        // If there's a different final URL, analyze it too
+                        if (redirectInfo.finalUrl !== data) {
+                            this.analyzeURL(redirectInfo.finalUrl, redirectInfo);
+                            this.checkExternalServices(redirectInfo.finalUrl);
+                        }
+                    } else if (redirectInfo.warning) {
+                        // Show warning for shorteners that couldn't be expanded
+                        this.displayRedirectInfo(redirectInfo);
+                    } else {
+                        // No redirects found, remove the checking status
+                        const statusDiv = document.getElementById('redirectStatus');
+                        if (statusDiv) {
+                            statusDiv.remove();
+                        }
+                    }
+
+                    // Show security warnings if malicious URLs found in chain
+                    if (redirectInfo.hasSecurityIssues) {
+                        this.showRedirectSecurityWarning(redirectInfo.maliciousUrls);
+                    }
+                }).catch(error => {
+                    console.error('Redirect check failed:', error);
+                    this.showRedirectStatus('failed');
+                    // Remove the status after 3 seconds
+                    setTimeout(() => {
+                        const statusDiv = document.getElementById('redirectStatus');
+                        if (statusDiv) {
+                            statusDiv.remove();
+                        }
+                    }, 3000);
+                });
+            } catch (e) {
+                // Not a valid URL, skip redirect checking
+                console.log('Not a valid URL for redirect checking:', e);
+            }
         }
     }
 
     showRedirectStatus(status) {
         const urlDisplay = document.getElementById('urlDisplay');
         if (status === 'checking') {
+            const existingStatus = document.getElementById('redirectStatus');
+            if (existingStatus) {
+                existingStatus.remove();
+            }
+
             const statusDiv = document.createElement('div');
             statusDiv.id = 'redirectStatus';
             statusDiv.style.cssText = 'margin-top: 10px; padding: 8px; background: rgba(255,149,0,0.1); border-radius: 8px; font-size: 13px; color: #FF9500;';
@@ -920,7 +1032,13 @@ class QRSafetyScanner {
         } else if (status === 'failed') {
             const statusDiv = document.getElementById('redirectStatus');
             if (statusDiv) {
-                statusDiv.innerHTML = '⚠️ Could not check redirects (CORS limitation)';
+                statusDiv.innerHTML = '⚠️ Could not check redirects (Network or CORS limitation)';
+                statusDiv.style.color = '#8E8E93';
+            }
+        } else if (status === 'none') {
+            const statusDiv = document.getElementById('redirectStatus');
+            if (statusDiv) {
+                statusDiv.remove();
             }
         }
     }
