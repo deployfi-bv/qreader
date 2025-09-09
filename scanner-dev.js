@@ -191,11 +191,13 @@ class QRSafetyScanner {
         let finalUrl = url;
         let error = null;
         let hasSecurityIssues = false;
+        let domain = null;
+        let isKnownShortener = false;
 
         try {
             const urlObj = new URL(url);
-            const domain = urlObj.hostname.toLowerCase();
-            const isKnownShortener = this.threatPatterns.shorteners.domains.some(shortener =>
+            domain = urlObj.hostname.toLowerCase();
+            isKnownShortener = this.threatPatterns.shorteners.domains.some(shortener =>
                 domain.includes(shortener));
 
             // Check ALL URLs for redirects, not just shorteners
@@ -269,13 +271,6 @@ class QRSafetyScanner {
                     }
                 }
             }
-                            }
-                        }
-                    } catch (apiError) {
-                        console.log('LongURL API failed');
-                    }
-                }
-            }
 
             // Pattern-based detection for common shorteners
             if (redirectChain.length === 0 && isKnownShortener) {
@@ -289,7 +284,9 @@ class QRSafetyScanner {
                         redirectCount: 1,
                         error: 'Unable to expand URL due to CORS restrictions',
                         warning: 'This is a shortened URL. Destination cannot be verified without visiting.',
-                        shortenerDomain: domain
+                        shortenerDomain: domain,
+                        maliciousUrls: maliciousUrls,
+                        hasSecurityIssues: hasSecurityIssues
                     };
                 }
             }
