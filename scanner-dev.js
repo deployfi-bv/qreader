@@ -9,16 +9,16 @@ class QRSafetyScanner {
             this.lastScannedCode = null;
             this.hasAI = false;
             this.aiSession = null;
-            this.initializeElements();  // Fixed typo
-            this.initEventListeners();  // Fixed typo
+            this.initializeElements();
+            this.initEventListeners();
             this.initHomoglyphMap();
-            this.initAIPatterns();  // Fixed typo
+            this.initAIPatterns();
         } catch (error) {
             console.error('Error in scanner constructor:', error);
         }
     }
 
-    initializeElements() {  // Fixed method name
+    initializeElements() {
         try {
             this.startButton = document.getElementById('startButton');
             this.resultModal = document.getElementById('resultModal');
@@ -35,23 +35,14 @@ class QRSafetyScanner {
             this.closeHelpBtn = document.getElementById('closeHelp');
             this.buttonsContainer = document.querySelector('.action-buttons-container');
 
-            // Check critical elements
-            if (!this.startButton) {
-                console.error('Start button not found!');
-            }
-            if (!this.helpButton) {
-                console.error('Help button not found!');
-            }
-
             console.log('✅ Elements initialized');
         } catch (error) {
             console.error('Error initializing elements:', error);
         }
     }
 
-    initEventListeners() {  // Fixed method name
+    initEventListeners() {
         try {
-            // Add both click and touchend events for iOS compatibility
             const addClickAndTouch = (element, handler) => {
                 if (element) {
                     element.addEventListener('click', handler, { passive: false });
@@ -64,7 +55,7 @@ class QRSafetyScanner {
 
             addClickAndTouch(this.startButton, () => this.startScanning());
             addClickAndTouch(this.closeModalBtn, () => this.closeResult());
-            addClickAndTouch(this.grantPermissionBtn, () => this.requestCameraPermission());  // Fixed method name
+            addClickAndTouch(this.grantPermissionBtn, () => this.requestCameraPermission());
             addClickAndTouch(this.copyButton, () => this.copyToClipboard());
             addClickAndTouch(this.openButton, () => this.openLink());
             addClickAndTouch(this.helpButton, () => this.showHelp());
@@ -97,9 +88,7 @@ class QRSafetyScanner {
     }
 
     initHomoglyphMap() {
-        // Extended homoglyph map for detecting lookalike characters
         this.homoglyphs = {
-            // Latin to Cyrillic and other scripts
             'a': ['а', 'ɑ', 'α', 'ａ'],
             'b': ['ь', 'ḃ', 'ｂ'],
             'c': ['с', 'ϲ', 'ⅽ', 'ｃ'],
@@ -111,7 +100,7 @@ class QRSafetyScanner {
             'i': ['і', 'ı', 'ⅰ', 'ｉ'],
             'j': ['ј', 'ⅼ', 'ｊ'],
             'k': ['к', 'ｋ'],
-            'l': ['Ӏ', '1', 'ⅼ', 'ｌ', '|'],
+            'l': ['ӏ', '1', 'ⅼ', 'ｌ', '|'],
             'm': ['м', 'ⅿ', 'ｍ'],
             'n': ['п', 'ｎ'],
             'o': ['о', '0', 'ο', 'ｏ', 'ø', 'ф'],
@@ -126,7 +115,6 @@ class QRSafetyScanner {
             'x': ['х', 'ⅹ', 'ｘ'],
             'y': ['у', 'ｙ'],
             'z': ['ｚ', 'ζ'],
-            // Capital letters
             'A': ['А', 'Α', 'Ａ'],
             'B': ['В', 'Β', 'Ｂ'],
             'C': ['С', 'Ͻ', 'Ｃ'],
@@ -143,14 +131,12 @@ class QRSafetyScanner {
             'X': ['Х', 'Χ', 'Ｘ'],
             'Y': ['У', 'Υ', 'Ｙ'],
             'Z': ['Ζ', 'Ｚ'],
-            // Numbers
             '0': ['О', 'о', 'O', 'o', 'Ο', 'ο', 'Ｏ', 'ｏ'],
-            '1': ['l', 'I', 'Ӏ', '|', 'ｌ', 'Ｉ'],
+            '1': ['l', 'I', 'ӏ', '|', 'ｌ', 'Ｉ'],
             '6': ['б'],
             '9': ['g']
         };
 
-        // Create reverse map for quick lookup
         this.reverseHomoglyphs = {};
         for (const [original, variants] of Object.entries(this.homoglyphs)) {
             for (const variant of variants) {
@@ -160,6 +146,196 @@ class QRSafetyScanner {
                 this.reverseHomoglyphs[variant].push(original);
             }
         }
+    }
+
+    detectHomoglyphs(text) {
+        const suspicious = [];
+        const chars = [...text];
+
+        for(let i = 0; i < chars.length; i++) {
+            const char = chars[i];
+
+            if (this.reverseHomoglyphs[char]) {
+                suspicious.push({
+                    position: i,
+                    char: char,
+                    original: this.reverseHomoglyphs[char],
+                    unicode: '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')
+                });
+            }
+
+            const charCode = char.charCodeAt(0);
+            const isCyrillic = (charCode >= 0x0400 && charCode <= 0x04FF);
+            const isGreek = (charCode >= 0x0370 && charCode <= 0x03FF);
+            const isFullwidth = (charCode >= 0xFF00 && charCode <= 0xFFEF);
+
+            if (isCyrillic || isGreek || isFullwidth) {
+                if (!suspicious.find(s => s.position === i)) {
+                    suspicious.push({
+                        position: i,
+                        char: char,
+                        type: isCyrillic ? 'Cyrillic' : isGreek ? 'Greek' : 'Fullwidth',
+                        unicode: '\\u' + charCode.toString(16).padStart(4, '0')
+                    });
+                }
+            }
+        }
+
+        return suspicious;
+    }
+
+    async checkRedirects(url, maxRedirects = 5) {
+        const redirectChain = [];
+        let currentUrl = url;
+        let finalUrl = url;
+        let error = null;
+
+        try {
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname.toLowerCase();
+            const isKnownShortener = this.threatPatterns.shorteners.domains.some(shortener =>
+                domain.includes(shortener));
+
+            if (!isKnownShortener) {
+                return {
+                    originalUrl: url,
+                    finalUrl: url,
+                    redirectChain: [],
+                    hasRedirects: false,
+                    redirectCount: 0,
+                    error: null
+                };
+            }
+
+            // Try multiple methods to check redirects
+            for (let i = 0; i < maxRedirects; i++) {
+                try {
+                    const corsProxy = 'https://corsproxy.io/?';
+                    const proxyUrl = corsProxy + encodeURIComponent(currentUrl);
+
+                    const response = await fetch(proxyUrl, {
+                        method: 'HEAD',
+                        mode: 'cors',
+                        redirect: 'manual',
+                        signal: AbortSignal.timeout(5000)
+                    }).catch(async (err) => {
+                        return await fetch(proxyUrl, {
+                            method: 'GET',
+                            mode: 'cors',
+                            redirect: 'follow',
+                            signal: AbortSignal.timeout(5000)
+                        });
+                    });
+
+                    if (response.redirected && response.url) {
+                        const redirectTo = response.url.replace(corsProxy, '');
+                        if (redirectTo && redirectTo !== currentUrl) {
+                            redirectChain.push({
+                                from: currentUrl,
+                                to: redirectTo,
+                                status: response.status,
+                                method: 'CORS Proxy'
+                            });
+                            currentUrl = redirectTo;
+                            finalUrl = redirectTo;
+                        } else {
+                            break;
+                        }
+                    } else if (response.headers && response.headers.get('location')) {
+                        const location = response.headers.get('location');
+                        redirectChain.push({
+                            from: currentUrl,
+                            to: location,
+                            status: response.status,
+                            method: 'CORS Proxy'
+                        });
+                        currentUrl = location;
+                        finalUrl = location;
+                    } else {
+                        break;
+                    }
+                } catch (fetchError) {
+                    console.log('CORS proxy failed, trying alternative methods...');
+                    break;
+                }
+            }
+
+            // Try URL expansion APIs if CORS failed
+            if (redirectChain.length === 0 && isKnownShortener) {
+                try {
+                    const expandResponse = await fetch(`https://unshorten.me/json/${encodeURIComponent(url)}`, {
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    if (expandResponse.ok) {
+                        const data = await expandResponse.json();
+                        if (data.resolved_url && data.resolved_url !== url) {
+                            redirectChain.push({
+                                from: url,
+                                to: data.resolved_url,
+                                status: 301,
+                                method: 'Unshorten.me API'
+                            });
+                            finalUrl = data.resolved_url;
+                        }
+                    }
+                } catch (apiError) {
+                    console.log('Unshorten.me API failed');
+                }
+
+                if (redirectChain.length === 0) {
+                    try {
+                        const cleanUrl = encodeURIComponent(url);
+                        const expandResponse = await fetch(`https://api.longurl.org/v1/expand?url=${cleanUrl}`, {
+                            signal: AbortSignal.timeout(3000)
+                        });
+                        if (expandResponse.ok) {
+                            const data = await expandResponse.json();
+                            if (data.long_url && data.long_url !== url) {
+                                redirectChain.push({
+                                    from: url,
+                                    to: data.long_url,
+                                    status: 301,
+                                    method: 'LongURL API'
+                                });
+                                finalUrl = data.long_url;
+                            }
+                        }
+                    } catch (apiError) {
+                        console.log('LongURL API failed');
+                    }
+                }
+            }
+
+            // Pattern-based detection for common shorteners
+            if (redirectChain.length === 0 && isKnownShortener) {
+                const shortCode = url.split('/').pop();
+                if (shortCode && shortCode.length < 15) {
+                    return {
+                        originalUrl: url,
+                        finalUrl: url,
+                        redirectChain: [],
+                        hasRedirects: true,
+                        redirectCount: 1,
+                        error: 'Unable to expand URL due to CORS restrictions',
+                        warning: 'This is a shortened URL. Destination cannot be verified without visiting.',
+                        shortenerDomain: domain
+                    };
+                }
+            }
+
+        } catch (e) {
+            error = e.message;
+            console.error('Redirect checking failed:', e);
+        }
+
+        return {
+            originalUrl: url,
+            finalUrl: finalUrl || url,
+            redirectChain: redirectChain,
+            hasRedirects: redirectChain.length > 0,
+            redirectCount: redirectChain.length,
+            error: error
+        };
     }
 
     async checkBrowserAI() {
@@ -197,18 +373,6 @@ class QRSafetyScanner {
                     } catch (e) {
                         console.log('⚠️ AI API exists but session creation failed:', e);
                     }
-                }
-            }
-
-            if ('gpu' in navigator) {
-                try {
-                    const adapter = await navigator.gpu.requestAdapter();
-                    if (adapter) {
-                        console.log('WebGPU available for AI acceleration');
-                        this.hasWebGPU = true;
-                    }
-                } catch (e) {
-                    console.log('WebGPU check failed:', e);
                 }
             }
         } catch (error) {
@@ -314,7 +478,7 @@ class QRSafetyScanner {
         }
     }
 
-    initAIPatterns() {  // Fixed method name
+    initAIPatterns() {
         this.checkBrowserAI().then(hasAI => {
             if (hasAI) {
                 console.log('🤖 Using real browser AI for analysis');
@@ -367,43 +531,7 @@ class QRSafetyScanner {
         };
     }
 
-    detectHomoglyphs(text) {
-        const suspicious = [];  // Fixed typo
-        const chars = [...text];
-
-        for(let i = 0; i < chars.length; i++) {
-            const char = chars[i];
-
-            if (this.reverseHomoglyphs[char]) {
-                suspicious.push({
-                    position: i,
-                    char: char,
-                    original: this.reverseHomoglyphs[char],
-                    unicode: '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')
-                });
-            }
-
-            const charCode = char.charCodeAt(0);
-            const isCyrillic = (charCode >= 0x0400 && charCode <= 0x04FF);
-            const isGreek = (charCode >= 0x0370 && charCode <= 0x03FF);
-            const isFullwidth = (charCode >= 0xFF00 && charCode <= 0xFFEF);
-
-            if (isCyrillic || isGreek || isFullwidth) {
-                if (!suspicious.find(s => s.position === i)) {
-                    suspicious.push({
-                        position: i,
-                        char: char,
-                        type: isCyrillic ? 'Cyrillic' : isGreek ? 'Greek' : 'Fullwidth',
-                        unicode: '\\u' + charCode.toString(16).padStart(4, '0')
-                    });
-                }
-            }
-        }
-
-        return suspicious;
-    }
-
-    async requestCameraPermission() {  // Fixed method name
+    async requestCameraPermission() {
         try {
             this.permissionScreen.style.display = 'none';
             await this.initCamera();
@@ -499,8 +627,124 @@ class QRSafetyScanner {
 
     handleQRCode(data) {
         this.showResult(data);
-        this.analyzeURL(data);  // Fixed typo
-        this.checkExternalServices(data);  // Fixed typo
+        this.analyzeURL(data);
+        this.checkExternalServices(data);
+
+        // Check for redirects if it's a URL
+        try {
+            const urlObj = new URL(data);
+            const domain = urlObj.hostname.toLowerCase();
+            const isShortener = this.threatPatterns.shorteners.domains.some(shortener =>
+                domain.includes(shortener));
+
+            if (isShortener || domain.length < 15) {
+                this.showRedirectStatus('checking');
+                this.checkRedirects(data).then(redirectInfo => {
+                    this.displayRedirectInfo(redirectInfo);
+                    if (redirectInfo.finalUrl !== data) {
+                        this.analyzeURL(redirectInfo.finalUrl, redirectInfo);
+                        this.checkExternalServices(redirectInfo.finalUrl);
+                    }
+                }).catch(error => {
+                    console.error('Redirect check failed:', error);
+                    this.showRedirectStatus('failed');
+                });
+            }
+        } catch (e) {
+            // Not a valid URL, skip redirect checking
+        }
+    }
+
+    showRedirectStatus(status) {
+        const urlDisplay = document.getElementById('urlDisplay');
+        if (status === 'checking') {
+            const statusDiv = document.createElement('div');
+            statusDiv.id = 'redirectStatus';
+            statusDiv.style.cssText = 'margin-top: 10px; padding: 8px; background: rgba(255,149,0,0.1); border-radius: 8px; font-size: 13px; color: #FF9500;';
+            statusDiv.innerHTML = '🔄 Checking for redirects...';
+            urlDisplay.parentElement.insertBefore(statusDiv, urlDisplay.nextSibling);
+        } else if (status === 'failed') {
+            const statusDiv = document.getElementById('redirectStatus');
+            if (statusDiv) {
+                statusDiv.innerHTML = '⚠️ Could not check redirects (CORS limitation)';
+            }
+        }
+    }
+
+    displayRedirectInfo(redirectInfo) {
+        const statusDiv = document.getElementById('redirectStatus');
+        if (statusDiv) {
+            statusDiv.remove();
+        }
+
+        // Handle case where it's a shortener but couldn't be expanded
+        if (redirectInfo.warning) {
+            const warningDisplay = document.createElement('div');
+            warningDisplay.id = 'redirectWarning';
+            warningDisplay.style.cssText = 'margin-top: 15px; padding: 12px; background: rgba(255,149,0,0.1); border: 1px solid #FF9500; border-radius: 10px;';
+
+            let html = '<h4 style="color: #FF9500; margin-bottom: 10px;">⚠️ URL Shortener Detected</h4>';
+            html += '<div style="font-size: 13px; color: #8E8E93;">';
+            html += `<p><strong>Domain:</strong> ${redirectInfo.shortenerDomain}</p>`;
+            html += '<p style="margin-top: 8px;">This is a shortened URL, but the final destination cannot be verified without visiting the link.</p>';
+            html += '<p style="margin-top: 8px; color: #FF9500;"><strong>Recommendation:</strong> Be extra cautious with shortened URLs as they can hide malicious destinations.</p>';
+            html += '</div>';
+
+            warningDisplay.innerHTML = html;
+            const urlDisplay = document.getElementById('urlDisplay');
+            urlDisplay.parentElement.insertBefore(warningDisplay, urlDisplay.nextSibling);
+            return;
+        }
+
+        if (!redirectInfo.hasRedirects) {
+            return;
+        }
+
+        const redirectDisplay = document.createElement('div');
+        redirectDisplay.id = 'redirectChain';
+        redirectDisplay.style.cssText = 'margin-top: 15px; padding: 12px; background: rgba(175,82,222,0.1); border: 1px solid #AF52DE; border-radius: 10px;';
+
+        let html = '<h4 style="color: #AF52DE; margin-bottom: 10px;">🔀 Redirect Chain Detected</h4>';
+        html += '<div style="font-size: 13px; color: #8E8E93;">';
+
+        if (redirectInfo.error && redirectInfo.redirectChain.length === 0) {
+            html += `<p>⚠️ Unable to fully trace redirects due to browser security restrictions</p>`;
+            html += `<p style="margin-top: 8px;">Original URL: <span style="color: #FF9500; word-break: break-all;">${redirectInfo.originalUrl}</span></p>`;
+            html += '<p style="margin-top: 8px; color: #FF9500;">Be cautious: the destination cannot be verified without visiting.</p>';
+        } else {
+            html += `<p>This URL redirects through ${redirectInfo.redirectCount} step(s):</p>`;
+            html += '<div style="margin-top: 10px; font-family: monospace; font-size: 12px;">';
+
+            html += `<div style="padding: 4px 0; color: #5AC8FA;">1. ${this.truncateUrl(redirectInfo.originalUrl)}</div>`;
+            redirectInfo.redirectChain.forEach((redirect, index) => {
+                const methodInfo = redirect.method ? ` (via ${redirect.method})` : '';
+                html += `<div style="padding: 4px 0; padding-left: 20px; color: #666;">↓${methodInfo}</div>`;
+                html += `<div style="padding: 4px 0; color: #5AC8FA;">${index + 2}. ${this.truncateUrl(redirect.to)}</div>`;
+            });
+
+            html += '</div>';
+            html += `<p style="margin-top: 10px;"><strong>Final destination:</strong></p>`;
+            html += `<div style="word-break: break-all; color: #5AC8FA; font-family: monospace; font-size: 12px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; margin-top: 5px;">${redirectInfo.finalUrl}</div>`;
+
+            if (redirectInfo.redirectCount > 2) {
+                html += '<p style="margin-top: 10px; padding: 8px; background: rgba(255,59,48,0.1); border-radius: 6px; color: #FF3B30;">';
+                html += '⚠️ <strong>High Risk:</strong> Multiple redirects detected. This is often used to evade detection.';
+                html += '</p>';
+            }
+        }
+
+        html += '</div>';
+        redirectDisplay.innerHTML = html;
+
+        const urlDisplay = document.getElementById('urlDisplay');
+        urlDisplay.parentElement.insertBefore(redirectDisplay, urlDisplay.nextSibling);
+    }
+
+    truncateUrl(url) {
+        if (url.length > 40) {
+            return url.substring(0, 37) + '...';
+        }
+        return url;
     }
 
     showResult(url) {
@@ -518,7 +762,7 @@ class QRSafetyScanner {
         });
     }
 
-    async checkExternalServices(url) {  // Fixed method name
+    async checkExternalServices(url) {
         const services = [
             { id: 'virustotal', name: 'VirusTotal', delay: 1500 },
             { id: 'google', name: 'Google Safe Browsing', delay: 1200 },
@@ -615,31 +859,6 @@ class QRSafetyScanner {
                 isSafe = false;
             }
 
-            const hasMalwareKeyword = this.threatPatterns.malware.keywords.some(keyword =>
-                path.includes(keyword));
-
-            if(hasMalwareKeyword){
-                threatDetails.push({
-                    type: 'Malware Keywords',
-                    description: 'Path contains suspicious download terms',
-                    severity: 'medium'
-                });
-                isSafe = false;
-            }
-
-            const hasMalwareExtension = this.threatPatterns.malware.extensions.some(ext =>
-                path.endsWith(ext));
-
-            if(hasMalwareExtension){
-                const ext = this.threatPatterns.malware.extensions.find(ext => path.endsWith(ext));
-                threatDetails.push({
-                    type: 'Executable File',
-                    description: `Direct download of ${ext} file detected`,
-                    severity: 'high'
-                });
-                isSafe = false;
-            }
-
             if (this.threatPatterns.shorteners.domains.some(shortener =>
                 domain.includes(shortener))) {
                 threatDetails.push({
@@ -652,23 +871,6 @@ class QRSafetyScanner {
                     message: 'Shortener',
                     details: threatDetails
                 };
-            }
-
-            if(serviceName === 'VirusTotal' && Math.random() > 0.3){
-                threatDetails.push({
-                    type: 'Community Reports',
-                    description: '3 users flagged as suspicious',
-                    severity: 'low'
-                });
-                isSafe = false;
-            }
-
-            if(serviceName === 'Google Safe Browsing' && domain.length > 30){
-                threatDetails.push({
-                    type: 'Domain Length',
-                    description: 'Unusually long domain name',
-                    severity: 'low'
-                });
             }
 
             if(threatDetails.length === 0){
@@ -725,40 +927,54 @@ class QRSafetyScanner {
         }
     }
 
-    analyzeURL(url) {  // Fixed method name
+    analyzeURL(url, redirectInfo = null) {
         if (this.hasAI) {
             console.log('🤖 Using browser AI for analysis...');
             this.analyzeWithAI(url).then(aiResult => {
                 if (aiResult) {
                     setTimeout(() => {
-                        const analysis = this.mergeAIWithPatternAnalysis(url, aiResult);
+                        const analysis = this.mergeAIWithPatternAnalysis(url, aiResult, redirectInfo);
                         this.displayAnalysis(analysis);
                         this.loadingSpinner.classList.remove('active');
                     }, 1500);
                 } else {
-                    this.performPatternAnalysis(url);
+                    this.performPatternAnalysis(url, redirectInfo);
                 }
             }).catch(error => {
                 console.error('AI analysis error:', error);
-                this.performPatternAnalysis(url);
+                this.performPatternAnalysis(url, redirectInfo);
             });
         } else {
-            this.performPatternAnalysis(url);
+            this.performPatternAnalysis(url, redirectInfo);
         }
     }
 
-    performPatternAnalysis(url) {
+    performPatternAnalysis(url, redirectInfo = null) {
         console.log('📊 Using pattern-based analysis...');
         setTimeout(() => {
-            const analysis = this.performAdvancedAIAnalysis(url);  // Fixed typo
+            const analysis = this.performAdvancedAIAnalysis(url);
+            if (redirectInfo) {
+                analysis.redirectInfo = redirectInfo;
+                if (redirectInfo.redirectCount > 2) {
+                    analysis.warnings.push(`Long redirect chain (${redirectInfo.redirectCount} hops)`);
+                    analysis.riskLevel = 'high';
+                    analysis.aiScore -= 20;
+                }
+                if (redirectInfo.hasRedirects) {
+                    analysis.warnings.push('URL shortener/redirect detected');
+                    if (analysis.riskLevel === 'low') {
+                        analysis.riskLevel = 'medium';
+                    }
+                }
+            }
             this.displayAnalysis(analysis);
             this.loadingSpinner.classList.remove('active');
         }, 2500);
     }
 
-    mergeAIWithPatternAnalysis(url, aiResult) {
+    mergeAIWithPatternAnalysis(url, aiResult, redirectInfo = null) {
         try {
-            const analysis = this.performAdvancedAIAnalysis(url);  // Fixed typo
+            const analysis = this.performAdvancedAIAnalysis(url);
 
             if (aiResult.riskLevel) {
                 analysis.riskLevel = aiResult.riskLevel;
@@ -782,14 +998,23 @@ class QRSafetyScanner {
 
             analysis.usedRealAI = true;
 
+            if (redirectInfo) {
+                analysis.redirectInfo = redirectInfo;
+                if (redirectInfo.redirectCount > 2) {
+                    analysis.warnings.push(`Long redirect chain (${redirectInfo.redirectCount} hops)`);
+                    analysis.riskLevel = 'high';
+                    analysis.aiScore -= 20;
+                }
+            }
+
             return analysis;
         } catch (e) {
             console.error('Error merging AI analysis:', e);
-            return this.performAdvancedAIAnalysis(url);  // Fixed typo
+            return this.performAdvancedAIAnalysis(url);
         }
     }
 
-    performAdvancedAIAnalysis(url) {  // Fixed method name
+    performAdvancedAIAnalysis(url) {
         const analysis = {
             url: url,
             isSafe: true,
@@ -846,7 +1071,7 @@ class QRSafetyScanner {
             }
 
             for (const trusted of this.threatPatterns.trustedDomains) {
-                const similarity = this.calculateSimilarity(domain, trusted);  // Fixed typo
+                const similarity = this.calculateSimilarity(domain, trusted);
                 if (similarity > 0.7 && similarity < 0.95) {
                     analysis.warnings.push(`Similar to ${trusted} (possible typosquatting)`);
                     analysis.riskLevel = 'high';
@@ -1062,7 +1287,6 @@ class QRSafetyScanner {
         }
 
         this.lastScannedCode = null;
-
         this.startButton.style.display = 'block';
         this.startButton.textContent = 'Scan Another Code';
     }
@@ -1070,7 +1294,7 @@ class QRSafetyScanner {
     copyToClipboard() {
         const url = document.getElementById('urlDisplay').textContent;
         navigator.clipboard.writeText(url).then(() => {
-            this.copyButton.textContent = 'Copied ✔';
+            this.copyButton.textContent = 'Copied ✓';
             setTimeout(() => {
                 this.copyButton.textContent = 'Copy Link';
             }, 2000);
@@ -1079,22 +1303,48 @@ class QRSafetyScanner {
 
     openLink() {
         const url = document.getElementById('urlDisplay').textContent;
+        const finalUrl = this.currentAnalysis?.redirectInfo?.finalUrl || url;
+
         if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'high') {
-            if (confirm('⚠️ WARNING! This link has multiple security risks:\n\n' +
-                       this.currentAnalysis.warnings.join('\n') +
-                       '\n\nAI Confidence: ' + this.currentAnalysis.aiScore + '%' +
-                       '\n\nAre you sure you want to continue?')) {
-                window.open(url, '_blank');
+            let warningMessage = '⚠️ WARNING! This link has multiple security risks:\n\n' +
+                                this.currentAnalysis.warnings.join('\n') +
+                                '\n\nAI Confidence: ' + this.currentAnalysis.aiScore + '%';
+
+            if (this.currentAnalysis.redirectInfo && this.currentAnalysis.redirectInfo.hasRedirects) {
+                warningMessage += '\n\n🔀 REDIRECT DETECTED!\n';
+                warningMessage += `Original: ${url}\n`;
+                warningMessage += `Final destination: ${finalUrl}\n`;
+                warningMessage += `Redirect hops: ${this.currentAnalysis.redirectInfo.redirectCount}`;
+            }
+
+            warningMessage += '\n\nAre you sure you want to continue?';
+
+            if (confirm(warningMessage)) {
+                window.open(finalUrl, '_blank');
             }
         } else if (this.currentAnalysis && this.currentAnalysis.riskLevel === 'medium') {
-            if (confirm('⚠️ Caution: This link has some suspicious indicators:\n\n' +
-                       this.currentAnalysis.warnings.join('\n') +
-                       '\n\nAI Confidence: ' + this.currentAnalysis.aiScore + '%' +
-                       '\n\nProceed?')) {
-                window.open(url, '_blank');
+            let cautionMessage = '⚠️ Caution: This link has some suspicious indicators:\n\n' +
+                                this.currentAnalysis.warnings.join('\n') +
+                                '\n\nAI Confidence: ' + this.currentAnalysis.aiScore + '%';
+
+            if (this.currentAnalysis.redirectInfo && this.currentAnalysis.redirectInfo.hasRedirects) {
+                cautionMessage += '\n\n🔀 This is a shortened URL that redirects to:\n';
+                cautionMessage += finalUrl;
+            }
+
+            cautionMessage += '\n\nProceed?';
+
+            if (confirm(cautionMessage)) {
+                window.open(finalUrl, '_blank');
             }
         } else {
-            window.open(url, '_blank');
+            if (this.currentAnalysis?.redirectInfo?.hasRedirects) {
+                if (confirm(`This shortened URL redirects to:\n${finalUrl}\n\nOpen it?`)) {
+                    window.open(finalUrl, '_blank');
+                }
+            } else {
+                window.open(url, '_blank');
+            }
         }
     }
 
@@ -1110,14 +1360,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM loaded, initializing scanner...');
         const scanner = new QRSafetyScanner();
 
-        // Handle app visibility changes
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && scanner.scanning) {
                 scanner.stopScanning();
             }
         });
 
-        // Add iOS-specific viewport handling
         if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
             document.documentElement.style.height = '100%';
             document.body.style.height = '100%';
